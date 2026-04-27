@@ -1,7 +1,19 @@
 [project]
 name = "yt-pipeline"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Video batch-processing pipeline with graceful shutdown and interrupt-resume."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
+
+[project.scripts]
+yt-pipeline = "yt_pipeline.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 120

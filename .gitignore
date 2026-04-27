@@ -15,3 +15,6 @@ wheels/
 # Runtime artifacts
 *.log
 progress.json
+
+# pytest cache
+.pytest_cache/
