@@ -6,7 +6,6 @@ import argparse
 import asyncio
 import logging
 import sys
-import random
 
 from yt_pipeline.config import PipelineConfig
 from yt_pipeline.shutdown import ShutdownManager
@@ -57,8 +56,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 async def main_async(args: argparse.Namespace) -> None:
-    random.seed(0)
-
     # 加载配置
     cfg = PipelineConfig.fast() if args.fast else PipelineConfig.from_env()
 
@@ -68,35 +65,38 @@ async def main_async(args: argparse.Namespace) -> None:
 
     # 加载/创建任务
     saved_tasks = load_progress(cfg.state_file)
+    
+    # 判断是否恢复：--resume > 交互式 > --fresh
+    should_resume = False
     if saved_tasks:
         if args.resume:
+            should_resume = True
             logger.info("Found previous progress. Auto-resuming (-y).")
         elif args.fresh:
             logger.info("Found previous progress. Auto-discarding (-n).")
             cfg.state_file.unlink()
-            saved_tasks = None
         else:
             try:
                 answer = (
                     input("Found previous progress. Resume? [Y/n] ").strip().lower()
                 )
+                should_resume = answer in ("", "y", "yes")
             except (EOFError, OSError):
-                answer = "n"
-            if answer not in ("", "y", "yes"):
+                should_resume = False
+            if should_resume:
+                logger.info("Resuming from saved state.")
+            else:
                 logger.info("Starting fresh, discarding old state.")
                 cfg.state_file.unlink()
-                saved_tasks = None
 
-    if saved_tasks:
+    # 应用恢复状态转移，或创建新任务
+    if should_resume and saved_tasks:
         tasks = saved_tasks
         for task in tasks:
             new_state = RESUME_RESET.get(task.state)
             if new_state is not None:
                 task.state = new_state
     else:
-        tasks = []
-
-    if not tasks:
         urls = args.urls if args.urls else list(cfg.default_urls)
         tasks = [Task(url) for url in urls]
 

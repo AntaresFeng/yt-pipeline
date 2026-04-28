@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 沟通约定
+
+使用中文与用户沟通。
+
 ## 项目简介
 
 视频批处理流水线 —— Python asyncio 实现，演示：优雅退出、断点续跑、并发下载 + 顺序转码。**此为异步流水线演示脚本，仅展示框架**
@@ -32,15 +36,15 @@ yt_pipeline/
 ├── shutdown.py    # ShutdownManager — 封装 asyncio.Event + 信号处理
 ├── persistence.py # progress.json 原子读写
 ├── mocks.py       # mock_download / mock_probe / mock_cover_process / mock_video_process
-├── workers.py     # download_worker / transcode_worker
-├── pipeline.py    # run_pipeline() 编排器
+├── workers.py     # download_worker / assessment_worker / transcode_worker
+├── pipeline.py    # run_pipeline() 编排器（三队列：pending → assessment → transcode）
 └── cli.py         # argparse CLI
 scripts/
 └── mock_ffmpeg.py # 独立 ffmpeg mock 子进程
 tests/
 ├── conftest.py        # PipelineProcess + fixtures
 ├── test_signals.py    # CTRL_BREAK_EVENT → asyncio.Event 链路验证
-└── test_pipeline.py   # 9 个中断/恢复集成测试
+└── test_pipeline.py   # 10 个中断/恢复集成测试
 ```
 
 ## 配置系统
@@ -64,4 +68,4 @@ tests/
 
 `pending` → `downloading` → `downloaded` → `probing_cover` → `processing_cover` → `probing_video` → `processing_video` → `done`
 
-任何阶段都可能进入 `failed`。中断恢复时：`downloading` → `pending`，中间转码态 → `downloaded`。
+任何阶段都可能进入 `failed`。中断恢复时：`downloading` → `pending`，中间转码态 → `downloaded`（`processing_video` 除外——该状态原样保留，恢复时直接进入转码阶段）。

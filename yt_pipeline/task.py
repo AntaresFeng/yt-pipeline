@@ -31,5 +31,4 @@ RESUME_RESET: dict[str, str] = {
     States.PROBING_COVER: States.DOWNLOADED,
     States.PROCESSING_COVER: States.DOWNLOADED,
     States.PROBING_VIDEO: States.DOWNLOADED,
-    States.PROCESSING_VIDEO: States.DOWNLOADED,
 }

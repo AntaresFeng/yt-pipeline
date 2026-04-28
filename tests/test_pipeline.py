@@ -97,6 +97,18 @@ def _dd(n: int) -> list[dict]:
     ]
 
 
+def _pv(n: int) -> list[dict]:
+    """构造: n 个 processing_video。"""
+    return [
+        {
+            "url": f"https://example.com/video{i + 1}",
+            "state": "processing_video",
+            "error": None,
+        }
+        for i in range(n)
+    ]
+
+
 INTERRUPT_TESTS = [
     _Case(
         "interrupt_during_download",
@@ -113,9 +125,9 @@ INTERRUPT_TESTS = [
             "Received Ctrl+C",
             "Sending 'q' to ffmpeg",
             "ffmpeg exited gracefully",
-            "Transcode cancelled by shutdown",
+            "Transcode cancelled, preserving processing_video state",
         ],
-        expected_states={"https://example.com/video5": "downloaded"},
+        expected_states={"https://example.com/video3": "processing_video"},
     ),
     _Case(
         "double_ctrlc_during_ffmpeg",
@@ -123,7 +135,7 @@ INTERRUPT_TESTS = [
         trigger_msg="Starting ffmpeg",
         double_ctrlc=True,
         expected_msgs=["Received Ctrl+C", "Sending 'q' to ffmpeg"],
-        expected_states={"https://example.com/video5": "downloaded"},
+        expected_states={"https://example.com/video3": "processing_video"},
     ),
     _Case(
         "interrupt_at_start",
@@ -136,7 +148,7 @@ INTERRUPT_TESTS = [
         cli_args=["-n"],
         trigger_msg="Download done",
         delay_after_trigger=0.1,
-        expected_msgs=["Received Ctrl+C", "Transcode cancelled by shutdown"],
+        expected_msgs=["Received Ctrl+C"],
         expected_states={"https://example.com/video5": "downloaded"},
     ),
 ]
@@ -148,7 +160,7 @@ RESUME_TESTS = [
         env=PipelineConfig.fast().to_env(),
         pre_state=_dl(1, 4),
         send_interrupt=False,
-        expected_msgs=["Loaded 5 tasks from saved state", "Completed successfully"],
+        expected_msgs=["Loaded 5 tasks from saved state", "All tasks processed."],
         timeout=60,
     ),
     _Case(
@@ -157,7 +169,20 @@ RESUME_TESTS = [
         env=PipelineConfig.fast().to_env(),
         pre_state=_dd(5),
         send_interrupt=False,
-        expected_msgs=["Loaded 5 tasks from saved state", "Completed successfully"],
+        expected_msgs=["Loaded 5 tasks from saved state", "All tasks processed."],
+        timeout=60,
+    ),
+    _Case(
+        "resume_processing_video",
+        cli_args=["-y"],
+        env=PipelineConfig.fast().to_env(),
+        pre_state=_pv(1),
+        send_interrupt=False,
+        expected_msgs=[
+            "Loaded 1 tasks from saved state",
+            "Transcode completed",
+            "All tasks processed.",
+        ],
         timeout=60,
     ),
     _Case(
@@ -169,7 +194,7 @@ RESUME_TESTS = [
         expected_msgs=[
             "Loaded 3 tasks from saved state",
             "Auto-discarding (-n)",
-            "Completed successfully",
+            "All tasks processed.",
         ],
         timeout=60,
     ),
@@ -178,7 +203,7 @@ RESUME_TESTS = [
         cli_args=["-n"],
         env=PipelineConfig.fast().to_env(),
         send_interrupt=False,
-        expected_msgs=["Completed successfully", "All tasks processed"],
+        expected_msgs=["All tasks processed."],
         timeout=60,
     ),
 ]

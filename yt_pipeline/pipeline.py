@@ -9,47 +9,28 @@ from yt_pipeline.config import PipelineConfig
 from yt_pipeline.shutdown import ShutdownManager
 from yt_pipeline.task import Task, States, TERMINAL_STATES
 from yt_pipeline.persistence import save_all_progress
-from yt_pipeline.workers import download_worker, transcode_worker
+from yt_pipeline.workers import download_worker, assessment_worker, transcode_worker
 
 logger = logging.getLogger("pipeline")
 
 
-async def run_pipeline(
-    tasks: list[Task],
+async def _drain_queue(q: asyncio.Queue) -> None:
+    """清空队列中剩余的所有项并标记 task_done。"""
+    while True:
+        try:
+            q.get_nowait()
+            q.task_done()
+        except asyncio.QueueEmpty:
+            break
+
+
+async def _join_or_shutdown(
+    q: asyncio.Queue,
+    worker: asyncio.Task,
     shutdown: ShutdownManager,
-    cfg: PipelineConfig,
 ) -> None:
-    """执行完整的下载→转码流水线。"""
-    pending_queue: asyncio.Queue[Task] = asyncio.Queue()
-    transcode_queue: asyncio.Queue[Task] = asyncio.Queue()
-
-    # 根据状态分配队列
-    for task in tasks:
-        if task.state == States.PENDING:
-            await pending_queue.put(task)
-        elif task.state == States.DOWNLOADED:
-            await transcode_queue.put(task)
-
-    sem = asyncio.Semaphore(cfg.download_concurrency)
-
-    # 启动 workers
-    downloaders = [
-        asyncio.create_task(
-            download_worker(sem, pending_queue, transcode_queue, tasks, shutdown, cfg)
-        )
-        for _ in range(cfg.download_concurrency)
-    ]
-    transcoder = asyncio.create_task(
-        transcode_worker(transcode_queue, tasks, shutdown, cfg)
-    )
-
-    try:
-        await asyncio.gather(*downloaders)
-    except asyncio.CancelledError:
-        pass
-
-    # 等待转码队列清空或退出信号触发（避免 join() 在信号后永久挂起）
-    join_task = asyncio.create_task(transcode_queue.join())
+    """等待队列清空或退出信号。信号触发时排空队列，正常完成时取消 worker。"""
+    join_task = asyncio.create_task(q.join())
     shutdown_task = asyncio.create_task(shutdown.event.wait())
     done, pending = await asyncio.wait(
         [join_task, shutdown_task],
@@ -59,21 +40,56 @@ async def run_pipeline(
         t.cancel()
 
     if shutdown_task in done:
-        # 信号已触发 —— 清空剩余队列项，让转码 worker 自行退出
-        while not transcode_queue.empty():
-            try:
-                transcode_queue.get_nowait()
-                transcode_queue.task_done()
-            except asyncio.QueueEmpty:
-                break
+        await _drain_queue(q)
     else:
-        # 正常完成 —— 取消转码 worker 以终止其轮询循环
-        transcoder.cancel()
+        worker.cancel()
 
     try:
-        await transcoder
+        await worker
     except asyncio.CancelledError:
         pass
+
+
+async def run_pipeline(
+    tasks: list[Task],
+    shutdown: ShutdownManager,
+    cfg: PipelineConfig,
+) -> None:
+    """执行完整的下载→assessment→转码流水线。"""
+    pending_queue: asyncio.Queue[Task] = asyncio.Queue()
+    assessment_queue: asyncio.Queue[Task] = asyncio.Queue()
+    transcode_queue: asyncio.Queue[Task] = asyncio.Queue()
+
+    for task in tasks:
+        if task.state == States.PENDING:
+            await pending_queue.put(task)
+        elif task.state == States.DOWNLOADED:
+            await assessment_queue.put(task)
+        elif task.state == States.PROCESSING_VIDEO:
+            await transcode_queue.put(task)
+
+    sem = asyncio.Semaphore(cfg.download_concurrency)
+
+    downloaders = [
+        asyncio.create_task(
+            download_worker(sem, pending_queue, assessment_queue, tasks, shutdown, cfg)
+        )
+        for _ in range(cfg.download_concurrency)
+    ]
+    assessment_task = asyncio.create_task(
+        assessment_worker(assessment_queue, transcode_queue, tasks, shutdown, cfg)
+    )
+    transcode_task = asyncio.create_task(
+        transcode_worker(transcode_queue, tasks, shutdown, cfg)
+    )
+
+    try:
+        await asyncio.gather(*downloaders)
+    except asyncio.CancelledError:
+        pass
+
+    await _join_or_shutdown(assessment_queue, assessment_task, shutdown)
+    await _join_or_shutdown(transcode_queue, transcode_task, shutdown)
 
     save_all_progress(tasks, cfg.state_file)
 
