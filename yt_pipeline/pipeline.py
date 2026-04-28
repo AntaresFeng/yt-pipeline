@@ -48,17 +48,32 @@ async def run_pipeline(
     except asyncio.CancelledError:
         pass
 
-    if not shutdown.is_set:
-        # 正常完成：等转码结束
-        await transcode_queue.join()
-        transcoder.cancel()
-        try:
-            await transcoder
-        except asyncio.CancelledError:
-            pass
+    # 等待转码队列清空或退出信号触发（避免 join() 在信号后永久挂起）
+    join_task = asyncio.create_task(transcode_queue.join())
+    shutdown_task = asyncio.create_task(shutdown.event.wait())
+    done, pending = await asyncio.wait(
+        [join_task, shutdown_task],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for t in pending:
+        t.cancel()
+
+    if shutdown_task in done:
+        # 信号已触发 —— 清空剩余队列项，让转码 worker 自行退出
+        while not transcode_queue.empty():
+            try:
+                transcode_queue.get_nowait()
+                transcode_queue.task_done()
+            except asyncio.QueueEmpty:
+                break
     else:
-        # 优雅退出：转码 worker 自行退出
+        # 正常完成 —— 取消转码 worker 以终止其轮询循环
+        transcoder.cancel()
+
+    try:
         await transcoder
+    except asyncio.CancelledError:
+        pass
 
     save_all_progress(tasks, cfg.state_file)
 

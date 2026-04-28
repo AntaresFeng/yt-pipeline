@@ -68,3 +68,20 @@ pytest tests/ -v
 ## 架构
 
 详见 `CLAUDE.md`（中文）。
+
+## 测试入口说明
+
+- **pytest 是测试运行器**：项目通过 `pytest` 收集并运行 `tests/` 下的用例（由 `pyproject.toml` 的 pytest 配置控制）。参见 [pyproject.toml](pyproject.toml)。
+- **测试如何启动程序**：测试套件不会直接调用包内函数，而是用子进程启动仓库根的 [main.py](main.py)（见 [tests/conftest.py](tests/conftest.py) 中的 `PipelineProcess` 实现）。这保证了测试对信号、子进程组和 stdin/stdout 行为的真实覆盖。
+- **`conftest.py` 与 pytest 的区别**：`conftest.py` 提供 Pytest fixtures/工具（例如 `PipelineProcess`、隔离的工作目录和进度文件构造器），而 pytest 本身是负责收集并执行测试用例的运行时。简言之：`pytest` 是运行器，`conftest.py` 是测试辅助库。
+
+## fast 模式行为（测试预设）
+
+- 快速模式由 `PipelineConfig.fast()` 提供（参见 [yt_pipeline/config.py](yt_pipeline/config.py)）。它会将常用的模拟延时缩短以加速测试，包括：`download_delay`、`probe_delay`、`cover_process_delay`、`mock_ffmpeg_frames`、`mock_ffmpeg_frame_delay`，以及（已更新）`mock_ffmpeg_cleanup_delay`。测试用例通过将该配置序列化为环境变量传递给子进程（`PipelineConfig.to_env()`）。
+
+如需在本地复现测试环境，直接运行：
+
+```bash
+pytest tests/ -v
+```
+

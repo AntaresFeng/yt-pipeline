@@ -69,13 +69,13 @@ def main():
     exit_code = 0
     try:
         for i in range(frame_count):
-            if q_event.is_set():
+            print(f"processing frame {i}...", flush=True)
+            # 使用 wait 而不是 sleep，收到 'q' 时立即响应
+            if q_event.wait(timeout=frame_delay):
                 print("Received 'q', exiting...")
                 time.sleep(cleanup_delay)
                 exit_code = EXIT_Q
                 break
-            print(f"processing frame {i}...", flush=True)
-            time.sleep(frame_delay)
     except KeyboardInterrupt:
         print("KeyboardInterrupt received, exiting...")
         time.sleep(cleanup_delay)

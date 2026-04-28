@@ -64,6 +64,7 @@ class PipelineConfig:
             cover_process_delay=0.1,
             mock_ffmpeg_frames=3,
             mock_ffmpeg_frame_delay=0.05,
+            mock_ffmpeg_cleanup_delay=0.05,
         )
 
     def to_env(self) -> dict[str, str]:

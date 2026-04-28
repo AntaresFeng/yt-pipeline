@@ -92,7 +92,7 @@ async def transcode_worker(
             # 探测封面
             task.state = States.PROBING_COVER
             save_all_progress(tasks, cfg.state_file)
-            cover_info = await mock_probe("cover", cfg)
+            cover_info = await mock_probe(task, "cover", cfg)
             need_cover = cover_info["height"] < 720
 
             if need_cover:
@@ -103,7 +103,7 @@ async def transcode_worker(
             # 探测视频
             task.state = States.PROBING_VIDEO
             save_all_progress(tasks, cfg.state_file)
-            video_info = await mock_probe("video", cfg)
+            video_info = await mock_probe(task, "video", cfg)
             need_video = 1080 < video_info["height"] < 1600
 
             if need_video:

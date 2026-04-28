@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -114,7 +115,7 @@ INTERRUPT_TESTS = [
             "ffmpeg exited gracefully",
             "Transcode cancelled by shutdown",
         ],
-        expected_states={"https://example.com/video1": "downloaded"},
+        expected_states={"https://example.com/video5": "downloaded"},
     ),
     _Case(
         "double_ctrlc_during_ffmpeg",
@@ -122,7 +123,7 @@ INTERRUPT_TESTS = [
         trigger_msg="Starting ffmpeg",
         double_ctrlc=True,
         expected_msgs=["Received Ctrl+C", "Sending 'q' to ffmpeg"],
-        expected_states={"https://example.com/video1": "downloaded"},
+        expected_states={"https://example.com/video5": "downloaded"},
     ),
     _Case(
         "interrupt_at_start",
@@ -136,7 +137,7 @@ INTERRUPT_TESTS = [
         trigger_msg="Download done",
         delay_after_trigger=0.1,
         expected_msgs=["Received Ctrl+C", "Transcode cancelled by shutdown"],
-        expected_states={"https://example.com/video1": "downloaded"},
+        expected_states={"https://example.com/video5": "downloaded"},
     ),
 ]
 
@@ -187,14 +188,14 @@ RESUME_TESTS = [
 _SRC_DIR = str(Path(__file__).parent.parent)
 
 
-def _make_env(tc: _Case) -> dict[str, str]:
-    """构建子进程环境变量：继承当前环境 + PYTHONPATH + 测试用例覆盖。"""
+def _make_env(tc: _Case, cfg: PipelineConfig) -> dict[str, str]:
+    """构建子进程环境变量：继承当前环境 + PYTHONPATH + 配置 + 测试用例覆盖。"""
     import os
 
     env = os.environ.copy()
-    # 确保子进程能找到 yt_pipeline 包
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = f"{_SRC_DIR}{os.pathsep}{existing}" if existing else _SRC_DIR
+    env.update(cfg.to_env())
     env.update(tc.env)
     return env
 
@@ -208,14 +209,13 @@ def _make_env(tc: _Case) -> dict[str, str]:
 def test_interrupt_scenario(tc: _Case, tmp_path: Path):
     """验证在各种时机按 Ctrl+C 后的行为。"""
     state_file = tmp_path / "progress.json"
-    cfg = PipelineConfig.from_env(state_file=state_file)
+    cfg = replace(PipelineConfig.fast(), state_file=state_file)
 
     # 准备预置状态
     if tc.pre_state:
         make_progress_json(tc.pre_state, state_file)
 
-    env = _make_env(tc)
-    env.update(cfg.to_env())  # 使用隔离的 state_file
+    env = _make_env(tc, cfg)
 
     proc = PipelineProcess(args=tc.cli_args, env=env, cwd=tmp_path)
 
@@ -274,8 +274,7 @@ def test_resume_scenario(tc: _Case, tmp_path: Path):
     if tc.pre_state:
         make_progress_json(tc.pre_state, state_file)
 
-    env = _make_env(tc)
-    env.update(cfg.to_env())
+    env = _make_env(tc, cfg)
 
     proc = PipelineProcess(args=tc.cli_args, env=env, cwd=tmp_path)
     proc.start()
