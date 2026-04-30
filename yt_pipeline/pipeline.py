@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 from yt_pipeline.config import PipelineConfig
 from yt_pipeline.shutdown import ShutdownManager
 from yt_pipeline.task import Task, States, TERMINAL_STATES
 from yt_pipeline.persistence import save_all_progress
+from yt_pipeline.strategy import build_ffmpeg_command
 from yt_pipeline.workers import download_worker, assessment_worker, transcode_worker
 
 logger = logging.getLogger("pipeline")
@@ -66,6 +68,9 @@ async def run_pipeline(
         elif task.state == States.DOWNLOADED:
             await assessment_queue.put(task)
         elif task.state == States.PROCESSING_VIDEO:
+            if task.ffmpeg_command is None and task.strategy and task.video_path:
+                cmd, _ = build_ffmpeg_command(Path(task.video_path), task.strategy)
+                task.ffmpeg_command = cmd
             await transcode_queue.put(task)
 
     sem = asyncio.Semaphore(cfg.download_concurrency)

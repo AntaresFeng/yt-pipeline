@@ -3,13 +3,6 @@
 from dataclasses import dataclass
 
 
-@dataclass
-class Task:
-    url: str
-    state: str = "pending"
-    error: str | None = None
-
-
 class States:
     PENDING = "pending"
     DOWNLOADING = "downloading"
@@ -20,6 +13,23 @@ class States:
     PROCESSING_VIDEO = "processing_video"
     DONE = "done"
     FAILED = "failed"
+
+
+@dataclass
+class Task:
+    url: str
+    state: str = States.PENDING
+    error: str | None = None
+    # 下载阶段填充
+    video_id: str | None = None
+    title: str | None = None
+    video_path: str | None = None
+    thumbnail_path: str | None = None
+    credits_path: str | None = None
+    # assessment 阶段填充
+    strategy: str | None = None
+    output_path: str | None = None
+    ffmpeg_command: list[str] | None = None
 
 
 # 终端状态：任务不再需要处理

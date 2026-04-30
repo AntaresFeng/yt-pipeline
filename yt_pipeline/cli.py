@@ -12,6 +12,7 @@ from yt_pipeline.shutdown import ShutdownManager
 from yt_pipeline.task import Task, RESUME_RESET
 from yt_pipeline.persistence import load_progress
 from yt_pipeline.pipeline import run_pipeline
+from yt_pipeline.url_collector import collect_urls
 
 logger = logging.getLogger("pipeline")
 
@@ -31,42 +32,40 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "--resume",
-        "-y",
+        "--resume", "-y",
         action="store_true",
         help="Auto-resume from saved progress.",
     )
     group.add_argument(
-        "--fresh",
-        "-n",
+        "--fresh", "-n",
         action="store_true",
         help="Discard saved progress and start fresh.",
     )
     parser.add_argument(
-        "--fast",
+        "--dry-run",
         action="store_true",
-        help="Use shortened delays (for automated testing).",
+        help="Run without network (generate test media instead of downloading).",
     )
     parser.add_argument(
-        "--urls",
-        nargs="*",
-        help="Video URLs to process (default: 5 example URLs).",
+        "--file", "-f",
+        help="Read URLs from a text file (one per line).",
+    )
+    parser.add_argument(
+        "urls", nargs="*",
+        help="Video URLs or YouTube IDs to process.",
     )
     return parser.parse_args(argv)
 
 
 async def main_async(args: argparse.Namespace) -> None:
-    # 加载配置
-    cfg = PipelineConfig.fast() if args.fast else PipelineConfig.from_env()
+    cfg = PipelineConfig.from_env(dry_run=args.dry_run)
 
-    # 注册优雅退出
     shutdown = ShutdownManager()
     shutdown.attach(asyncio.get_running_loop())
 
     # 加载/创建任务
     saved_tasks = load_progress(cfg.state_file)
-    
-    # 判断是否恢复：--resume > 交互式 > --fresh
+
     should_resume = False
     if saved_tasks:
         if args.resume:
@@ -81,7 +80,7 @@ async def main_async(args: argparse.Namespace) -> None:
                     input("Found previous progress. Resume? [Y/n] ").strip().lower()
                 )
                 should_resume = answer in ("", "y", "yes")
-            except (EOFError, OSError):
+            except (EOFError, KeyboardInterrupt, OSError):
                 should_resume = False
             if should_resume:
                 logger.info("Resuming from saved state.")
@@ -89,7 +88,6 @@ async def main_async(args: argparse.Namespace) -> None:
                 logger.info("Starting fresh, discarding old state.")
                 cfg.state_file.unlink()
 
-    # 应用恢复状态转移，或创建新任务
     if should_resume and saved_tasks:
         tasks = saved_tasks
         for task in tasks:
@@ -97,7 +95,10 @@ async def main_async(args: argparse.Namespace) -> None:
             if new_state is not None:
                 task.state = new_state
     else:
-        urls = args.urls if args.urls else list(cfg.default_urls)
+        urls = collect_urls(args.urls, args.file)
+        if not urls:
+            logger.info("No URLs to process. Exiting.")
+            return
         tasks = [Task(url) for url in urls]
 
     try:

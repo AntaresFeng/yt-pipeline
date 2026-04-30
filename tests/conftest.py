@@ -136,11 +136,6 @@ class PipelineProcess:
 
 
 @pytest.fixture
-def fast_cfg() -> PipelineConfig:
-    return PipelineConfig.fast()
-
-
-@pytest.fixture
 def default_cfg() -> PipelineConfig:
     return PipelineConfig.from_env()
 
@@ -167,6 +162,37 @@ def read_progress_json(path: Path) -> dict | None:
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def make_test_image(path: Path, width: int, height: int) -> None:
+    """用 ffmpeg lavfi 生成测试图片。"""
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"color=c=red:s={width}x{height}:d=0.1",
+            "-frames:v", "1",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def make_test_video(path: Path, width: int = 320, height: int = 240) -> None:
+    """用 ffmpeg lavfi 生成测试视频片段。"""
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"testsrc=s={width}x{height}:d=0.5",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-t", "0.5",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def check_states(progress: dict, expected: dict[str, str]) -> bool:
