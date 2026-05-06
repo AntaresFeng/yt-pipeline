@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 
-from yt_pipeline.task import Task
+from yt_pipeline.model import Task
 
 logger = logging.getLogger("pipeline.persistence")
 
@@ -18,6 +18,7 @@ _SERIALIZED_FIELDS = [
     "credits_path",
     "strategy",
     "output_path",
+    "ffmpeg_command",
 ]
 
 
