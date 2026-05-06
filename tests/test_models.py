@@ -1,7 +1,7 @@
 """ImageSpec / VideoSpec 属性测试。"""
 
 import pytest
-from yt_pipeline.models import ImageSpec, VideoSpec
+from yt_pipeline.model import ImageSpec, VideoSpec
 
 
 class TestImageSpec:

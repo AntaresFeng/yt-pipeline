@@ -7,11 +7,10 @@ import asyncio
 import logging
 import sys
 
-from yt_pipeline.config import PipelineConfig
-from yt_pipeline.shutdown import ShutdownManager
-from yt_pipeline.task import Task, RESUME_RESET
+from yt_pipeline.constants import STATE_FILE
+from yt_pipeline.pipeline import ShutdownManager, run_pipeline
+from yt_pipeline.model import Task, RESUME_RESET
 from yt_pipeline.persistence import load_progress
-from yt_pipeline.pipeline import run_pipeline
 from yt_pipeline.url_collector import collect_urls
 
 logger = logging.getLogger("pipeline")
@@ -42,11 +41,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Discard saved progress and start fresh.",
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Run without network (generate test media instead of downloading).",
-    )
-    parser.add_argument(
         "--file", "-f",
         help="Read URLs from a text file (one per line).",
     )
@@ -58,13 +52,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 async def main_async(args: argparse.Namespace) -> None:
-    cfg = PipelineConfig.from_env(dry_run=args.dry_run)
-
     shutdown = ShutdownManager()
     shutdown.attach(asyncio.get_running_loop())
 
     # 加载/创建任务
-    saved_tasks = load_progress(cfg.state_file)
+    saved_tasks = load_progress(STATE_FILE)
 
     should_resume = False
     if saved_tasks:
@@ -73,7 +65,7 @@ async def main_async(args: argparse.Namespace) -> None:
             logger.info("Found previous progress. Auto-resuming (-y).")
         elif args.fresh:
             logger.info("Found previous progress. Auto-discarding (-n).")
-            cfg.state_file.unlink()
+            STATE_FILE.unlink()
         else:
             try:
                 answer = (
@@ -86,7 +78,7 @@ async def main_async(args: argparse.Namespace) -> None:
                 logger.info("Resuming from saved state.")
             else:
                 logger.info("Starting fresh, discarding old state.")
-                cfg.state_file.unlink()
+                STATE_FILE.unlink()
 
     if should_resume and saved_tasks:
         tasks = saved_tasks
@@ -102,7 +94,7 @@ async def main_async(args: argparse.Namespace) -> None:
         tasks = [Task(url) for url in urls]
 
     try:
-        await run_pipeline(tasks, shutdown, cfg)
+        await run_pipeline(tasks, shutdown, STATE_FILE)
     except asyncio.CancelledError:
         logger.info("Pipeline interrupted by user.")
     except KeyboardInterrupt:

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from yt_pipeline.shutdown import ShutdownManager
-from yt_pipeline.task import Task
-from yt_pipeline.transcoder import transcode_video
+from yt_pipeline.pipeline import ShutdownManager
+from yt_pipeline.model import Task
+from yt_pipeline.transcode_worker import transcode_video
 
 _MOCK_FFMPEG = str(
     (Path(__file__).parent.parent / "scripts" / "mock_ffmpeg.py").resolve()

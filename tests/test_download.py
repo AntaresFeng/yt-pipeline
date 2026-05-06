@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from yt_pipeline.download import generate_credits, resolve_video_path
+from yt_pipeline.download_worker import generate_credits, resolve_video_path
 from yt_pipeline.constants import VIDEO_EXTS
 
 

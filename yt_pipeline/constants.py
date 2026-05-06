@@ -1,4 +1,11 @@
-"""视频处理业务常量。"""
+"""视频处理业务常量与运行时配置。"""
+
+import os
+from pathlib import Path
+
+# ---- 运行时配置（可通过环境变量覆盖）----
+DOWNLOAD_CONCURRENCY: int = int(os.environ.get("PIPELINE_DOWNLOAD_CONCURRENCY", "4"))
+STATE_FILE: Path = Path(os.environ.get("PIPELINE_STATE_FILE", "progress.json"))
 
 # ---- 处理策略 ----
 STRATEGY_SKIP = "skip"

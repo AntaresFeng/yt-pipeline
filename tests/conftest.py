@@ -1,133 +1,37 @@
-"""pytest fixtures: 子进程管理、progress.json 构造、配置预设。"""
+"""pytest fixtures: progress.json 构造、配置预设、进程内 pipeline 测试环境。"""
 
 from __future__ import annotations
 
+import asyncio
 import json
-import signal
 import subprocess
-import sys
-import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from yt_pipeline.config import PipelineConfig
-
-PROJECT_ROOT = Path(__file__).parent.parent
-MAIN_SCRIPT = PROJECT_ROOT / "main.py"
-
-# 常见错误消息（任何测试中出现即为失败）
-FORBIDDEN_MESSAGES = [
-    "Event loop is closed",
-    "task_done() called too many times",
-    "Traceback (most recent call last)",
-]
+from yt_pipeline import constants
+from yt_pipeline.model import ImageSpec, VideoSpec
+from yt_pipeline.pipeline import ShutdownManager
+from yt_pipeline.model import States
 
 
-class PipelineProcess:
-    """封装子进程的启动、信号发送、输出收集。"""
+@dataclass
+class PipelineEnv:
+    """进程内 pipeline 测试环境。"""
 
-    def __init__(
-        self,
-        args: list[str],
-        env: dict[str, str],
-        cwd: Path,
-    ):
-        self.args = args
-        self.env = env
-        self.cwd = cwd
-        self._process: subprocess.Popen | None = None
-        self.stderr_lines: list[str] = []
-        self._trigger_event = threading.Event()
-        self._trigger_count = 0
-        self._reader_thread: threading.Thread | None = None
-        self._reading = False
+    state_file: Path
+    shutdown: ShutdownManager
+    dl_started: asyncio.Event
+    dl_proceed: asyncio.Event
+    tc_started: asyncio.Event
+    tc_proceed: asyncio.Event
+    monkeypatch: pytest.MonkeyPatch
 
-    # ---- 启动 ----
-
-    def start(
-        self, trigger_msg: str | None = None, trigger_occurrence: int = 1
-    ) -> None:
-        """启动子进程，始终开启 stderr 读取线程。可选触发消息监听。"""
-        self._process = subprocess.Popen(
-            [sys.executable, str(MAIN_SCRIPT)] + self.args,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-            env=self.env,
-            cwd=str(self.cwd),
-        )
-        self._process.stdin.close()
-        self._reading = True
-
-        def _read():
-            count = 0
-            try:
-                for line in self._process.stderr:
-                    self.stderr_lines.append(line)
-                    if trigger_msg and trigger_msg in line:
-                        count += 1
-                        if count == trigger_occurrence:
-                            self._trigger_event.set()
-            except Exception:
-                pass
-
-        self._reader_thread = threading.Thread(target=_read, daemon=True)
-        self._reader_thread.start()
-
-    # ---- 信号 ----
-
-    def send_ctrl_break(self) -> None:
-        """发送 CTRL_BREAK_EVENT 到子进程。"""
-        if self._process:
-            self._process.send_signal(signal.CTRL_BREAK_EVENT)
-
-    # ---- 等待 ----
-
-    def wait_for_trigger(self, timeout: float = 30) -> bool:
-        """等待触发消息出现。"""
-        return self._trigger_event.wait(timeout=timeout)
-
-    def wait(self, timeout: float = 60) -> int:
-        """等待子进程退出，返回 exit code。"""
-        try:
-            self._process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            self._kill()
-            raise
-        if self._reader_thread is not None:
-            self._reader_thread.join(timeout=5)
-        # 持续读取残留输出（reader 线程可能还在写）
-        if self._reading and self._process.stderr:
-            try:
-                for line in self._process.stderr:
-                    self.stderr_lines.append(line)
-            except Exception:
-                pass
-        return self._process.returncode
-
-    def _kill(self) -> None:
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(self._process.pid)],
-                capture_output=True,
-                timeout=10,
-            )
-        except Exception:
-            pass
-
-    # ---- 属性 ----
-
-    @property
-    def output(self) -> str:
-        return "".join(self.stderr_lines)
-
-    @property
-    def returncode(self) -> int | None:
-        return self._process.returncode if self._process else None
+    def release_all(self) -> None:
+        """释放所有阻塞事件，让 mock 快速完成。"""
+        self.dl_proceed.set()
+        self.tc_proceed.set()
 
 
 # ---------------------------------------------------------------------------
@@ -136,14 +40,67 @@ class PipelineProcess:
 
 
 @pytest.fixture
-def default_cfg() -> PipelineConfig:
-    return PipelineConfig.from_env()
-
-
-@pytest.fixture
 def work_dir(tmp_path: Path) -> Path:
     """隔离的工作目录，progress.json 在这里创建。"""
     return tmp_path
+
+
+@pytest.fixture
+async def pipeline_env(tmp_path: Path, monkeypatch) -> PipelineEnv:
+    """进程内 pipeline 测试环境。默认 mock 快速完成，测试可按需覆盖。"""
+    state_file = tmp_path / "progress.json"
+    monkeypatch.setattr(constants, "STATE_FILE", state_file)
+    shutdown = ShutdownManager()
+
+    dl_started = asyncio.Event()
+    dl_proceed = asyncio.Event()
+    tc_started = asyncio.Event()
+    tc_proceed = asyncio.Event()
+
+    async def mock_download(task, _shutdown):
+        task.state = States.DOWNLOADING
+        task.video_id = "test123"
+        task.title = "Test Video"
+        task.video_path = str(tmp_path / "test123.mp4")
+        Path(task.video_path).touch()
+        task.thumbnail_path = str(tmp_path / "test123.png")
+        Path(task.thumbnail_path).touch()
+        task.credits_path = str(tmp_path / "test123.description")
+        Path(task.credits_path).write_text("credits", encoding="utf-8")
+        dl_started.set()
+        await dl_proceed.wait()
+        if _shutdown.is_set:
+            raise asyncio.CancelledError("Download cancelled by shutdown")
+        task.state = States.DOWNLOADED
+
+    async def mock_transcode(task, _shutdown):
+        task.state = States.PROCESSING_VIDEO
+        tc_started.set()
+        await tc_proceed.wait()
+        if _shutdown.is_set:
+            raise asyncio.CancelledError("Transcode cancelled by shutdown")
+        task.state = States.DONE
+
+    async def mock_probe(path):
+        return ImageSpec(width=1920, height=1080)
+
+    async def mock_ffprobe(path):
+        return VideoSpec(width=1082, height=1082)
+
+    monkeypatch.setattr("yt_pipeline.download_worker.download_video", mock_download)
+    monkeypatch.setattr("yt_pipeline.transcode_worker.transcode_video", mock_transcode)
+    monkeypatch.setattr("yt_pipeline.assessment_worker.probe_dimensions", mock_probe)
+    monkeypatch.setattr("yt_pipeline.assessment_worker.ffprobe_dimensions", mock_ffprobe)
+
+    yield PipelineEnv(
+        state_file=state_file,
+        shutdown=shutdown,
+        dl_started=dl_started,
+        dl_proceed=dl_proceed,
+        tc_started=tc_started,
+        tc_proceed=tc_proceed,
+        monkeypatch=monkeypatch,
+    )
 
 
 # ---------------------------------------------------------------------------
