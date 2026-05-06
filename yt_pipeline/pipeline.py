@@ -1,17 +1,18 @@
-"""Pipeline 编排器：管理队列、worker 生命周期、完成检测。"""
+"""Pipeline 编排器：管理队列、worker 生命周期、完成检测、优雅退出。"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 from pathlib import Path
 
-from yt_pipeline.config import PipelineConfig
-from yt_pipeline.shutdown import ShutdownManager
-from yt_pipeline.task import Task, States, TERMINAL_STATES
+from yt_pipeline.constants import DOWNLOAD_CONCURRENCY
+from yt_pipeline.model import Task, States, TERMINAL_STATES
 from yt_pipeline.persistence import save_all_progress
-from yt_pipeline.strategy import build_ffmpeg_command
-from yt_pipeline.workers import download_worker, assessment_worker, transcode_worker
+from yt_pipeline.download_worker import download_worker
+from yt_pipeline.assessment_worker import assessment_worker
+from yt_pipeline.transcode_worker import transcode_worker
 
 logger = logging.getLogger("pipeline")
 
@@ -55,7 +56,7 @@ async def _join_or_shutdown(
 async def run_pipeline(
     tasks: list[Task],
     shutdown: ShutdownManager,
-    cfg: PipelineConfig,
+    state_file: Path,
 ) -> None:
     """执行完整的下载→assessment→转码流水线。"""
     pending_queue: asyncio.Queue[Task] = asyncio.Queue()
@@ -68,24 +69,21 @@ async def run_pipeline(
         elif task.state == States.DOWNLOADED:
             await assessment_queue.put(task)
         elif task.state == States.PROCESSING_VIDEO:
-            if task.ffmpeg_command is None and task.strategy and task.video_path:
-                cmd, _ = build_ffmpeg_command(Path(task.video_path), task.strategy)
-                task.ffmpeg_command = cmd
             await transcode_queue.put(task)
 
-    sem = asyncio.Semaphore(cfg.download_concurrency)
+    sem = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
 
     downloaders = [
         asyncio.create_task(
-            download_worker(sem, pending_queue, assessment_queue, tasks, shutdown, cfg)
+            download_worker(sem, pending_queue, assessment_queue, tasks, shutdown, state_file)
         )
-        for _ in range(cfg.download_concurrency)
+        for _ in range(DOWNLOAD_CONCURRENCY)
     ]
     assessment_task = asyncio.create_task(
-        assessment_worker(assessment_queue, transcode_queue, tasks, shutdown, cfg)
+        assessment_worker(assessment_queue, transcode_queue, tasks, shutdown, state_file)
     )
     transcode_task = asyncio.create_task(
-        transcode_worker(transcode_queue, tasks, shutdown, cfg)
+        transcode_worker(transcode_queue, tasks, shutdown, state_file)
     )
 
     try:
@@ -96,11 +94,46 @@ async def run_pipeline(
     await _join_or_shutdown(assessment_queue, assessment_task, shutdown)
     await _join_or_shutdown(transcode_queue, transcode_task, shutdown)
 
-    save_all_progress(tasks, cfg.state_file)
+    save_all_progress(tasks, state_file)
 
     if all(t.state in TERMINAL_STATES for t in tasks):
         logger.info("All tasks processed.")
-        if cfg.state_file.exists():
-            cfg.state_file.unlink()
+        if state_file.exists():
+            state_file.unlink()
     else:
         logger.info("Pipeline stopped, progress saved.")
+
+
+class ShutdownManager:
+    """管理优雅退出流程。
+
+    使用方式:
+        shutdown = ShutdownManager()
+        shutdown.attach(asyncio.get_running_loop())
+        ...
+        if shutdown.is_set:
+            break
+    """
+
+    def __init__(self):
+        self.event: asyncio.Event = asyncio.Event()
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def attach(self, loop: asyncio.AbstractEventLoop) -> None:
+        """绑定事件循环并注册信号处理器。"""
+        self._loop = loop
+        try:
+            loop.add_signal_handler(signal.SIGINT, self._handle_signal)
+            loop.add_signal_handler(signal.SIGBREAK, self._handle_signal)
+        except NotImplementedError:
+            signal.signal(signal.SIGINT, self._handle_signal)
+            signal.signal(signal.SIGBREAK, self._handle_signal)
+
+    def _handle_signal(self, signum: int | None = None, frame=None) -> None:
+        logger.warning("Received Ctrl+C, requesting graceful shutdown...")
+        if self._loop is not None and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self.event.set)
+
+    @property
+    def is_set(self) -> bool:
+        return self.event.is_set()
