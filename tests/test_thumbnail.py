@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from yt_pipeline.thumbnail import find_thumbnail, process_thumbnail
+from yt_pipeline.download_worker import find_thumbnail
+from yt_pipeline.assessment_worker import process_thumbnail
 from tests.conftest import make_test_image
 
 ffmpeg_available = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None

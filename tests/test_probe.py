@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from yt_pipeline.probe import probe_dimensions, ffprobe_dimensions
-from yt_pipeline.models import ImageSpec, VideoSpec
+from yt_pipeline.assessment_worker import probe_dimensions, ffprobe_dimensions
+from yt_pipeline.model import ImageSpec, VideoSpec
 from tests.conftest import make_test_image
 
 ffprobe_available = shutil.which("ffprobe") is not None

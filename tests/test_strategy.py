@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from yt_pipeline.models import VideoSpec
-from yt_pipeline.strategy import decide_video_strategy, build_ffmpeg_command
+from yt_pipeline.model import VideoSpec
+from yt_pipeline.assessment_worker import decide_video_strategy, build_ffmpeg_command
 
 
 # ---------------------------------------------------------------------------
@@ -86,25 +86,21 @@ class TestBuildFfmpegCommand:
         with pytest.raises(ValueError, match="未知策略"):
             build_ffmpeg_command(video, "unknown")
 
-    def test_output_avoids_overwrite(self, tmp_path: Path):
+    def test_output_overwrite_with_y_flag(self, tmp_path: Path):
         video = tmp_path / "test.mp4"
         video.touch()
-        # 第一次生成的输出路径
         _, output1 = build_ffmpeg_command(video, "upscale_4k")
-        # 手动创建同名文件
         output1.parent.mkdir(parents=True, exist_ok=True)
         output1.touch()
-        # 第二次应生成带后缀的路径
         _, output2 = build_ffmpeg_command(video, "upscale_4k")
-        assert output2 != output1
-        assert output2.exists() is False
+        assert output2 == output1  # -y 覆盖，不再追加时间戳
 
     def test_command_flags(self, tmp_path: Path):
         video = tmp_path / "test.mp4"
         video.touch()
         cmd, _ = build_ffmpeg_command(video, "upscale_4k")
         assert cmd[0] == "ffmpeg"
-        assert "-n" in cmd
+        assert "-y" in cmd
         assert "-c:v" in cmd
         assert "libx264" in cmd
         assert "-c:a" in cmd
