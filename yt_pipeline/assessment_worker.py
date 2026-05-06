@@ -6,17 +6,17 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from yt_pipeline.constants import STRATEGY_SKIP, THUMBNAIL_MIN_HEIGHT
-from yt_pipeline.model import Task, States
+from yt_pipeline.model import Task, States, StreamSpec
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
 
+if TYPE_CHECKING:
+    from yt_pipeline.pipeline import ShutdownManager
+
 logger = logging.getLogger("pipeline.assessment_worker")
-
-
-async def _noop() -> None:
-    """占位协程，用于 asyncio.gather 中不需要执行的分支。"""
 
 
 async def run_command(cmd: list[str]) -> tuple[int, str, str]:
@@ -34,14 +34,9 @@ async def run_command(cmd: list[str]) -> tuple[int, str, str]:
     )
 
 
-async def probe_dimensions(file_path: Path) -> "ImageSpec":
-    """ffprobe 获取图片/视频尺寸。
-
-    Raises:
-        RuntimeError: 无法读取尺寸
-    """
-    from yt_pipeline.model import ImageSpec
-
+async def probe(file_path: Path) -> StreamSpec:
+    """ffprobe 获取媒体流尺寸。"""
+    # fmt: off
     rc, stdout, stderr = await run_command([
         "ffprobe", "-hide_banner",
         "-v", "error",
@@ -50,6 +45,7 @@ async def probe_dimensions(file_path: Path) -> "ImageSpec":
         "-of", "json",
         str(file_path),
     ])
+    # fmt: on
 
     if rc != 0:
         raise RuntimeError(f"ffprobe 失败: {stderr[:200]}")
@@ -62,6 +58,7 @@ async def probe_dimensions(file_path: Path) -> "ImageSpec":
         width = int(stream.get("width") or 0)
         height = int(stream.get("height") or 0)
     else:
+        # fmt: off
         rc2, stdout2, stderr2 = await run_command([
             "ffprobe", "-hide_banner",
             "-v", "error",
@@ -69,6 +66,7 @@ async def probe_dimensions(file_path: Path) -> "ImageSpec":
             "-of", "json",
             str(file_path),
         ])
+        # fmt: on
         if rc2 != 0:
             raise RuntimeError(f"ffprobe format 探测失败: {stderr2[:200]}")
         data2 = json.loads(stdout2)
@@ -78,32 +76,21 @@ async def probe_dimensions(file_path: Path) -> "ImageSpec":
 
     if width <= 0 or height <= 0:
         raise RuntimeError(f"无法读取尺寸: {file_path}")
-    return ImageSpec(width=width, height=height)
+    return StreamSpec(width=width, height=height)
 
 
-async def ffprobe_dimensions(file_path: Path) -> "VideoSpec":
-    """ffprobe 获取视频尺寸，返回 VideoSpec。"""
-    from yt_pipeline.model import VideoSpec
-
-    spec = await probe_dimensions(file_path)
-    return VideoSpec(width=spec.width, height=spec.height)
-
-
-async def process_thumbnail(thumbnail_path: Path) -> list[Path]:
-    """如果封面高度 < THUMBNAIL_MIN_HEIGHT，裁剪 16:9 后 2x 超分。
-
-    返回生成的文件列表。跳过时返回空列表。
-    """
+async def process_thumbnail(thumbnail_path: Path) -> None:
+    """如果封面高度 < THUMBNAIL_MIN_HEIGHT，裁剪 16:9 后 2x 超分。"""
     from yt_pipeline.constants import TARGET_ASPECT_RATIO
 
-    spec = await probe_dimensions(thumbnail_path)
+    spec = await probe(thumbnail_path)
     if spec.height >= THUMBNAIL_MIN_HEIGHT:
         logger.info(
             "封面高度 %dpx >= %d，跳过封面处理。",
             spec.height,
             THUMBNAIL_MIN_HEIGHT,
         )
-        return []
+        return
 
     # Python 端计算 16:9 裁剪尺寸，避免 ffmpeg if() 表达式在 Windows 下解析异常
     if spec.width / spec.height >= TARGET_ASPECT_RATIO:
@@ -113,9 +100,6 @@ async def process_thumbnail(thumbnail_path: Path) -> list[Path]:
         crop_w = spec.width
         crop_h = spec.width * 9 // 16
 
-    cropped = thumbnail_path.with_name(
-        f"{thumbnail_path.stem}_169{thumbnail_path.suffix}"
-    )
     upscaled = thumbnail_path.with_name(
         f"{thumbnail_path.stem}_169_2x{thumbnail_path.suffix}"
     )
@@ -124,30 +108,17 @@ async def process_thumbnail(thumbnail_path: Path) -> list[Path]:
     rc, _, stderr = await run_command([
         "ffmpeg", "-hide_banner", "-y",
         "-i", str(thumbnail_path),
-        "-vf", f"crop={crop_w}:{crop_h}",
-        str(cropped),
-    ])
-    # fmt: on
-    if rc != 0:
-        raise RuntimeError(f"封面裁剪失败: {stderr[:200]}")
-
-    # fmt: off
-    rc2, _, stderr2 = await run_command([
-        "ffmpeg", "-hide_banner", "-y",
-        "-i", str(cropped),
-        "-vf", "scale=iw*2:ih*2:flags=lanczos",
+        "-vf", f"crop={crop_w}:{crop_h},scale=iw*2:ih*2:flags=lanczos",
         str(upscaled),
     ])
     # fmt: on
-    if rc2 != 0:
-        raise RuntimeError(f"封面超分失败: {stderr2[:200]}")
+    if rc != 0:
+        raise RuntimeError(f"封面处理失败: {stderr[:200]}")
 
-    cropped.unlink(missing_ok=True)
     logger.info("已生成封面文件: %s", upscaled.name)
-    return [upscaled]
 
 
-def decide_video_strategy(spec: "VideoSpec") -> tuple[str, str | None]:
+def decide_video_strategy(spec: StreamSpec) -> tuple[str, str | None]:
     """根据视频尺寸决定处理策略。
 
     Returns:
@@ -155,11 +126,15 @@ def decide_video_strategy(spec: "VideoSpec") -> tuple[str, str | None]:
         非 skip 时 reason 为 None。
     """
     from yt_pipeline.constants import (
-        STRATEGY_SKIP, STRATEGY_UPSCALE_4K, STRATEGY_PAD_1600,
-        MIN_SHORT_EDGE, MAX_SHORT_EDGE, RATIO_THRESHOLD,
+        STRATEGY_SKIP,
+        STRATEGY_UPSCALE_4K,
+        STRATEGY_PAD_1600,
+        MIN_SHORT_EDGE,
+        MAX_SHORT_EDGE,
+        RATIO_THRESHOLD,
     )
 
-    if not spec.is_horizontal:
+    if spec.width < spec.height:
         return STRATEGY_SKIP, "竖屏视频，按规则跳过"
 
     short_edge = spec.short_edge
@@ -180,9 +155,14 @@ def build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Pa
         (command, output_path)
     """
     from yt_pipeline.constants import (
-        STRATEGY_UPSCALE_4K, STRATEGY_PAD_1600,
-        TARGET_4K_WIDTH, TARGET_4K_HEIGHT, TARGET_PAD_HEIGHT,
-        FFMPEG_CRF, FFMPEG_PRESET, FFMPEG_AUDIO_BITRATE,
+        STRATEGY_UPSCALE_4K,
+        STRATEGY_PAD_1600,
+        TARGET_4K_WIDTH,
+        TARGET_4K_HEIGHT,
+        TARGET_PAD_HEIGHT,
+        FFMPEG_CRF,
+        FFMPEG_PRESET,
+        FFMPEG_AUDIO_BITRATE,
     )
 
     if strategy == STRATEGY_UPSCALE_4K:
@@ -219,7 +199,7 @@ async def assessment_worker(
     assessment_queue: asyncio.Queue[Task],
     transcode_queue: asyncio.Queue[Task],
     tasks: list[Task],
-    shutdown: "ShutdownManager",
+    shutdown: ShutdownManager,
     state_file: Path,
 ) -> None:
     """串行 assessment worker：探测封面/视频尺寸并决策是否需要转码。"""
@@ -242,16 +222,14 @@ async def assessment_worker(
                 raise RuntimeError("video_path 未设置")
 
             task.state = States.PROBING_COVER
-            thumb_spec_coro = (
-                probe_dimensions(Path(task.thumbnail_path))
-                if task.thumbnail_path
-                else _noop()
-            )
-            results = await asyncio.gather(
-                thumb_spec_coro,
-                ffprobe_dimensions(video_path),
-            )
-            thumb_spec, video_spec = results[0], results[1]
+            if task.thumbnail_path:
+                thumb_spec, video_spec = await asyncio.gather(
+                    probe(Path(task.thumbnail_path)),
+                    probe(video_path),
+                )
+            else:
+                thumb_spec = None
+                video_spec = await probe(video_path)
 
             if thumb_spec is not None and thumb_spec.height < THUMBNAIL_MIN_HEIGHT:
                 task.state = States.PROCESSING_COVER
@@ -277,7 +255,9 @@ async def assessment_worker(
                 save_all_progress(tasks, state_file)
                 await transcode_queue.put(task)
         except asyncio.CancelledError:
-            logger.warning("[%s] Assessment cancelled, resetting to downloaded", task.url)
+            logger.warning(
+                "[%s] Assessment cancelled, resetting to downloaded", task.url
+            )
             task.state = States.DOWNLOADED
             save_all_progress(tasks, state_file)
             raise

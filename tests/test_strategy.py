@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from yt_pipeline.model import VideoSpec
+from yt_pipeline.model import StreamSpec
 from yt_pipeline.assessment_worker import decide_video_strategy, build_ffmpeg_command
 
 
@@ -49,7 +49,7 @@ STRATEGY_PARAMS = [
     ],
 )
 def test_decide_strategy(width, height, expected_strategy, expected_reason):
-    spec = VideoSpec(width=width, height=height)
+    spec = StreamSpec(width=width, height=height)
     strategy, reason = decide_video_strategy(spec)
     assert strategy == expected_strategy
     if expected_reason is None:

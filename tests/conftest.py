@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import subprocess
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from yt_pipeline import constants
-from yt_pipeline.model import ImageSpec, VideoSpec
+from yt_pipeline.model import StreamSpec
 from yt_pipeline.pipeline import ShutdownManager
 from yt_pipeline.model import States
 
@@ -46,7 +47,7 @@ def work_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-async def pipeline_env(tmp_path: Path, monkeypatch) -> PipelineEnv:
+async def pipeline_env(tmp_path: Path, monkeypatch) -> AsyncGenerator[PipelineEnv, None]:
     """进程内 pipeline 测试环境。默认 mock 快速完成，测试可按需覆盖。"""
     state_file = tmp_path / "progress.json"
     monkeypatch.setattr(constants, "STATE_FILE", state_file)
@@ -82,15 +83,11 @@ async def pipeline_env(tmp_path: Path, monkeypatch) -> PipelineEnv:
         task.state = States.DONE
 
     async def mock_probe(path):
-        return ImageSpec(width=1920, height=1080)
-
-    async def mock_ffprobe(path):
-        return VideoSpec(width=1082, height=1082)
+        return StreamSpec(width=1920, height=1440)
 
     monkeypatch.setattr("yt_pipeline.download_worker.download_video", mock_download)
     monkeypatch.setattr("yt_pipeline.transcode_worker.transcode_video", mock_transcode)
-    monkeypatch.setattr("yt_pipeline.assessment_worker.probe_dimensions", mock_probe)
-    monkeypatch.setattr("yt_pipeline.assessment_worker.ffprobe_dimensions", mock_ffprobe)
+    monkeypatch.setattr("yt_pipeline.assessment_worker.probe", mock_probe)
 
     yield PipelineEnv(
         state_file=state_file,
@@ -123,6 +120,7 @@ def read_progress_json(path: Path) -> dict | None:
 
 def make_test_image(path: Path, width: int, height: int) -> None:
     """用 ffmpeg lavfi 生成测试图片。"""
+    # fmt: off
     subprocess.run(
         [
             "ffmpeg", "-y",
@@ -134,10 +132,12 @@ def make_test_image(path: Path, width: int, height: int) -> None:
         capture_output=True,
         text=True,
     )
+    # fmt: on
 
 
 def make_test_video(path: Path, width: int = 320, height: int = 240) -> None:
     """用 ffmpeg lavfi 生成测试视频片段。"""
+    # fmt: off
     subprocess.run(
         [
             "ffmpeg", "-y",
@@ -150,6 +150,7 @@ def make_test_video(path: Path, width: int = 320, height: int = 240) -> None:
         capture_output=True,
         text=True,
     )
+    # fmt: on
 
 
 def check_states(progress: dict, expected: dict[str, str]) -> bool:

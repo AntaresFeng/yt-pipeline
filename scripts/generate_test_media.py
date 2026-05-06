@@ -24,38 +24,47 @@ def generate_all(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Small test pattern (16x9)
+    # fmt: off
     run([
         "ffmpeg", "-y",
         "-f", "lavfi", "-i", "color=c=red:s=16x9:d=0.1",
         "-frames:v", "1",
         str(output_dir / "16x9.png"),
     ])
+    # fmt: on
 
     # SD size (640x480, horizontal)
+    # fmt: off
     run([
         "ffmpeg", "-y",
         "-f", "lavfi", "-i", "testsrc=s=640x480:d=0.1",
         "-frames:v", "1",
         str(output_dir / "640x480.png"),
     ])
+    # fmt: on
 
     # Small cover (below 720p threshold)
+    # fmt: off
     run([
         "ffmpeg", "-y",
         "-f", "lavfi", "-i", "testsrc=s=640x360:d=0.1",
         "-frames:v", "1",
         str(output_dir / "cover_640x360.png"),
     ])
+    # fmt: on
 
     # HD cover (at 720p threshold)
+    # fmt: off
     run([
         "ffmpeg", "-y",
         "-f", "lavfi", "-i", "testsrc=s=1280x720:d=0.1",
         "-frames:v", "1",
         str(output_dir / "cover_1280x720.png"),
     ])
+    # fmt: on
 
     # Short video clip (1s)
+    # fmt: off
     run([
         "ffmpeg", "-y",
         "-f", "lavfi", "-i", "testsrc=s=320x240:d=1",
@@ -63,6 +72,7 @@ def generate_all(output_dir: Path) -> None:
         "-t", "1",
         str(output_dir / "test_short.mp4"),
     ])
+    # fmt: on
 
     print(f"Generated test media in {output_dir}")
 

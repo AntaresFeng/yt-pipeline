@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 import sys
 from datetime import timedelta
-import json
 
 import yt_dlp
 from yt_dlp.utils import DownloadError
@@ -188,7 +187,7 @@ def main() -> None:
         except DownloadError as e:
             logger.error("下载失败: %s — %s", url, e)
             continue
-        except Exception as e:
+        except Exception:
             logger.exception("下载失败（意外错误）: %s", url)
             sys.exit(1)
 

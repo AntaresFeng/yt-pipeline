@@ -5,11 +5,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from yt_pipeline.constants import MAX_TITLE_LENGTH, VIDEO_EXTS, IMAGE_EXTS
 from yt_pipeline.model import Task, States
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
+
+if TYPE_CHECKING:
+    from yt_pipeline.pipeline import ShutdownManager
 
 logger = logging.getLogger("pipeline.download_worker")
 
@@ -120,7 +124,7 @@ def generate_credits(info: dict, source_url: str, video_path: Path) -> Path:
 
 # ── 异步入口 ──────────────────────────────────────────────────
 
-async def download_video(task: Task, shutdown: "ShutdownManager") -> None:
+async def download_video(task: Task, shutdown: ShutdownManager) -> None:
     """异步下载视频，填充 task 的 video_id/video_path/thumbnail_path/credits_path。"""
     if shutdown.is_set:
         raise asyncio.CancelledError("Shutdown before download")
@@ -159,7 +163,7 @@ async def download_worker(
     pending_queue: asyncio.Queue[Task],
     assessment_queue: asyncio.Queue[Task],
     tasks: list[Task],
-    shutdown: "ShutdownManager",
+    shutdown: ShutdownManager,
     state_file: Path,
 ) -> None:
     """并发下载 worker：从 pending_queue 取任务，完成后放入 assessment_queue。"""

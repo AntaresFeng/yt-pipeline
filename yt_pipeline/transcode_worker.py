@@ -7,17 +7,21 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from yt_pipeline.model import Task, States
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
+
+if TYPE_CHECKING:
+    from yt_pipeline.pipeline import ShutdownManager
 
 logger = logging.getLogger("pipeline.transcode_worker")
 
 
 async def run_transcode(
     cmd: list[str],
-    shutdown: "ShutdownManager",
+    shutdown: ShutdownManager,
     *,
     label: str = "",
 ) -> None:
@@ -86,7 +90,7 @@ async def run_transcode(
         await asyncio.sleep(0)
 
 
-async def transcode_video(task: Task, shutdown: "ShutdownManager") -> None:
+async def transcode_video(task: Task, shutdown: ShutdownManager) -> None:
     """执行视频转码。"""
     if task.ffmpeg_command is None:
         raise ValueError("task.ffmpeg_command 未设置")
@@ -96,7 +100,7 @@ async def transcode_video(task: Task, shutdown: "ShutdownManager") -> None:
 async def transcode_worker(
     transcode_queue: asyncio.Queue[Task],
     tasks: list[Task],
-    shutdown: "ShutdownManager",
+    shutdown: ShutdownManager,
     state_file: Path,
 ) -> None:
     """串行转码 worker：仅处理 PROCESSING_VIDEO → 视频转码 → DONE。"""

@@ -338,6 +338,7 @@ async def probe_dimensions(file_path: Path) -> "ImageSpec":
     """
     from yt_pipeline.model import ImageSpec
 
+    # fmt: off
     rc, stdout, stderr = await run_command([
         "ffprobe", "-hide_banner",
         "-v", "error",
@@ -346,6 +347,7 @@ async def probe_dimensions(file_path: Path) -> "ImageSpec":
         "-of", "json",
         str(file_path),
     ])
+    # fmt: on
 
     if rc != 0:
         raise RuntimeError(f"ffprobe 失败: {stderr[:200]}")
@@ -358,6 +360,7 @@ async def probe_dimensions(file_path: Path) -> "ImageSpec":
         width = int(stream.get("width") or 0)
         height = int(stream.get("height") or 0)
     else:
+        # fmt: off
         rc2, stdout2, stderr2 = await run_command([
             "ffprobe", "-hide_banner",
             "-v", "error",
@@ -365,6 +368,7 @@ async def probe_dimensions(file_path: Path) -> "ImageSpec":
             "-of", "json",
             str(file_path),
         ])
+        # fmt: on
         if rc2 != 0:
             raise RuntimeError(f"ffprobe format 探测失败: {stderr2[:200]}")
         data2 = json.loads(stdout2)

@@ -1,6 +1,6 @@
 """进程内 pipeline 中断/恢复测试。
 
-用 monkeypatch 替换 download_video / transcode_video / probe_dimensions / ffprobe_dimensions，
+用 monkeypatch 替换 download_video / transcode_video / probe，
 用 asyncio.Event 控制执行时序，用 shutdown.event.set() 模拟 Ctrl+C。
 """
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from yt_pipeline.model import VideoSpec
+from yt_pipeline.model import StreamSpec
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.pipeline import run_pipeline
 from yt_pipeline.model import Task, States, RESUME_RESET
@@ -131,12 +131,12 @@ async def test_interrupt_during_assessment(pipeline_env):
     probe_started = asyncio.Event()
     probe_proceed = asyncio.Event()
 
-    async def mock_ffprobe(path):
+    async def mock_probe(path):
         probe_started.set()
         await probe_proceed.wait()
-        return VideoSpec(width=1082, height=1082)
+        return StreamSpec(width=1082, height=1082)
 
-    env.monkeypatch.setattr("yt_pipeline.assessment_worker.ffprobe_dimensions", mock_ffprobe)
+    env.monkeypatch.setattr("yt_pipeline.assessment_worker.probe", mock_probe)
 
     pipeline_task = asyncio.create_task(run_pipeline([task], env.shutdown, env.state_file))
     await probe_started.wait()
