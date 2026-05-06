@@ -11,37 +11,12 @@ from yt_pipeline.process import run_command
 logger = logging.getLogger("pipeline.thumbnail")
 
 
-def find_thumbnail(video_path: Path, video_id: str) -> Path | None:
-    """根据 video_path 同名前缀 + video_id glob 查找封面文件。"""
-    candidates: list[Path] = []
-
-    # 同视频文件名、不同图片扩展名
-    for ext in IMAGE_EXTS:
-        p = video_path.with_suffix(ext)
-        if p.exists():
-            candidates.append(p)
-
-    # 按 video_id glob
-    if video_id:
-        for p in Path.cwd().glob(f"*{video_id}*"):
-            if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
-                candidates.append(p)
-
-    if not candidates:
-        return None
-
-    uniq = list({c.resolve(): c for c in candidates}.values())
-    uniq.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    return uniq[0]
-
-
 async def process_thumbnail(thumbnail_path: Path) -> list[Path]:
     """如果封面高度 < THUMBNAIL_MIN_HEIGHT，裁剪 16:9 后 2x 超分。
 
     返回生成的文件列表。跳过时返回空列表。
     """
-    # 需要 probe 模块，延迟导入避免循环（probe 依赖 process，本模块也依赖 process）
-    from yt_pipeline.probe import probe_dimensions
+    from yt_pipeline.process import probe_dimensions
 
     spec = await probe_dimensions(thumbnail_path)
     if spec.height >= THUMBNAIL_MIN_HEIGHT:
