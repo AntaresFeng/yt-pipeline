@@ -103,7 +103,7 @@ def resolve_video_path(info: dict, video_id: str) -> Path | None:
     return find_media_file(video_id, VIDEO_EXTS)
 
 
-def generate_credits(info: dict, source_url: str, video_path: Path) -> Path:
+def generate_credits(info: dict, source_url: str, video_path: Path) -> None:
     """从 yt-dlp info dict 生成来源文案 .description 文件。"""
     channel = info.get("channel") or "未知"
     title = info.get("title") or "未知"
@@ -119,7 +119,6 @@ def generate_credits(info: dict, source_url: str, video_path: Path) -> Path:
         f"{description}"
     )
     out_path.write_text(text, encoding="utf-8")
-    return out_path
 
 
 # ── 异步入口 ──────────────────────────────────────────────────
@@ -141,7 +140,6 @@ async def download_video(task: Task, shutdown: ShutdownManager) -> None:
         raise RuntimeError("下载完成但未定位到视频文件。")
 
     task.video_id = video_id
-    task.title = info.get("title")
     task.video_path = str(video_path)
 
     for ext in IMAGE_EXTS:
@@ -150,8 +148,7 @@ async def download_video(task: Task, shutdown: ShutdownManager) -> None:
             task.thumbnail_path = str(candidate)
             break
 
-    credits_path = generate_credits(info, task.url, video_path)
-    task.credits_path = str(credits_path)
+    generate_credits(info, task.url, video_path)
 
     logger.info("[%s] Download done", task.url)
 

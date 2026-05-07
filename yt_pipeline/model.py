@@ -20,15 +20,9 @@ class Task:
     url: str
     state: str = States.PENDING
     error: str | None = None
-    # 下载阶段填充
     video_id: str | None = None
-    title: str | None = None
     video_path: str | None = None
     thumbnail_path: str | None = None
-    credits_path: str | None = None
-    # assessment 阶段填充
-    strategy: str | None = None
-    output_path: str | None = None
     ffmpeg_command: list[str] | None = None
 
 

@@ -247,9 +247,7 @@ async def assessment_worker(
                 save_all_progress(tasks, state_file)
                 logger.info("[%s] Skipped: %s", task.url, reason)
             else:
-                cmd, output = build_ffmpeg_command(video_path, strategy)
-                task.strategy = strategy
-                task.output_path = str(output)
+                cmd, _ = build_ffmpeg_command(video_path, strategy)
                 task.ffmpeg_command = cmd
                 task.state = States.PROCESSING_VIDEO
                 save_all_progress(tasks, state_file)
