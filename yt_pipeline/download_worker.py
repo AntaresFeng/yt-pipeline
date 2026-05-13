@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from yt_pipeline.constants import MAX_TITLE_LENGTH, VIDEO_EXTS, IMAGE_EXTS
+from yt_pipeline.config import VIDEO_EXTS, IMAGE_EXTS, MAX_TITLE_LENGTH
 from yt_pipeline.model import Task, States
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
@@ -30,8 +30,6 @@ def find_media_file(video_id: str, exts: set[str]) -> Path | None:
 
 def find_thumbnail(video_path: Path, video_id: str) -> Path | None:
     """根据 video_path 同名前缀 + video_id glob 查找封面文件。"""
-    from yt_pipeline.constants import IMAGE_EXTS
-
     candidates: list[Path] = []
 
     # 同视频文件名、不同图片扩展名

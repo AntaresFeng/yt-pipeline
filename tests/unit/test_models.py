@@ -15,10 +15,7 @@ class TestStreamSpec:
         spec = StreamSpec(width=1080, height=1920)
         assert spec.short_edge == 1080
         assert spec.long_edge == 1920
-
-    def test_ultrawide_ratio(self):
-        spec = StreamSpec(width=3840, height=1080)
-        assert spec.ratio == pytest.approx(3840 / 1080)
+        assert spec.ratio == pytest.approx(1920 / 1080)
 
     def test_square(self):
         spec = StreamSpec(width=1080, height=1080)

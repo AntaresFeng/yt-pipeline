@@ -41,15 +41,15 @@ async def run_transcode(
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.PIPE,
         **popen_kwargs,
     )
 
-    wait_proc = asyncio.create_task(proc.wait())
+    comm_task = asyncio.create_task(proc.communicate())
     shutdown_task = asyncio.create_task(shutdown.event.wait())
     done, pending = await asyncio.wait(
-        [wait_proc, shutdown_task],
+        [comm_task, shutdown_task],
         return_when=asyncio.FIRST_COMPLETED,
     )
 
@@ -64,7 +64,13 @@ async def run_transcode(
                     pass
                 finally:
                     proc.stdin.close()
-            await proc.communicate()
+
+            try:
+                await asyncio.wait_for(comm_task, timeout=10.0)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+
             if proc.returncode == 0:
                 logger.info("%sffmpeg exited gracefully (sent 'q')", prefix)
             else:
@@ -73,12 +79,12 @@ async def run_transcode(
                 )
             raise asyncio.CancelledError("Shutdown during transcode")
 
-        # 子进程自行退出
-        _stdout, stderr = await proc.communicate()
+        _, stderr = comm_task.result()
         if proc.returncode != 0:
+            stderr_text = stderr.decode(errors="replace") if stderr else ""
             msg = f"ffmpeg exited with code {proc.returncode}"
-            if stderr:
-                msg += f": {stderr.decode()[:200]}"
+            if stderr_text:
+                msg += f": {stderr_text[:200]}"
             logger.warning("%s%s", prefix, msg)
             raise RuntimeError(msg)
         logger.info("%sffmpeg finished", prefix)
@@ -88,13 +94,6 @@ async def run_transcode(
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
         await asyncio.sleep(0)
-
-
-async def transcode_video(task: Task, shutdown: ShutdownManager) -> None:
-    """执行视频转码。"""
-    if task.ffmpeg_command is None:
-        raise ValueError("task.ffmpeg_command 未设置")
-    await run_transcode(task.ffmpeg_command, shutdown, label=task.url)
 
 
 async def transcode_worker(
@@ -118,7 +117,9 @@ async def transcode_worker(
             continue
 
         try:
-            await transcode_video(task, shutdown)
+            if task.ffmpeg_command is None:
+                raise ValueError("task.ffmpeg_command 未设置")
+            await run_transcode(task.ffmpeg_command, shutdown, label=task.url)
             task.state = States.DONE
             save_all_progress(tasks, state_file)
             logger.info("[%s] Transcode completed", task.url)

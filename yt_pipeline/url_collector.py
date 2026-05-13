@@ -15,27 +15,22 @@ except ImportError:
     pyperclip = None  # type: ignore
 
 
-def collect_urls(urls: list[str] | None = None, file_path: str | None = None) -> list[str]:
+def collect_urls(
+    urls: list[str] | None = None, file_path: str | None = None
+) -> list[str]:
     """收集 URL。优先级：file_path > urls > 交互输入。"""
     if file_path:
         return _from_file(Path(file_path))
-
     if urls:
         return _filter(urls)
-
     return _from_input()
-
-
-# ---------------------------------------------------------------------------
-# internal
-# ---------------------------------------------------------------------------
 
 
 def _from_file(path: Path) -> list[str]:
     lines = path.read_text(encoding="utf-8").splitlines()
     result = _filter(lines)
     if not result:
-        print("文件中未找到有效链接。")
+        print("No valid links were found in the file.")
     return result
 
 
@@ -43,9 +38,9 @@ def _from_input() -> list[str]:
     monitor = _ClipboardMonitor()
     monitor.start()
     try:
-        typed = input("请输入视频链接（回车结束）: ").strip()
+        typed = input("Enter video links (press Enter to finish): ").strip()
     except (EOFError, KeyboardInterrupt):
-        print("\n已取消。")
+        print("\nCancelled.")
         monitor.stop()
         return []
     clipboard_items = monitor.stop()
@@ -72,22 +67,22 @@ def _is_url(s: str) -> bool:
 
 def _confirm(urls: list[str]) -> list[str]:
     if not urls:
-        print("未检测到有效链接。")
+        print("No valid links detected.")
         return []
-    print(f"\n检测到 {len(urls)} 个有效链接:")
+    print(f"\nDetected {len(urls)} valid links:")
     for i, url in enumerate(urls, 1):
         print(f"  {i}. {url}")
     while True:
         try:
-            raw = input("确认处理以上链接? [Y/n] ").strip().lower()
+            raw = input("Confirm processing these links? [Y/n] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
-            print("\n已取消。")
+            print("\nCancelled.")
             return []
         if not raw or raw in ("y", "yes"):
             return urls
         if raw in ("n", "no"):
             return []
-        print("请输入 y 或 n。")
+        print("Please enter y or n.")
 
 
 class _ClipboardMonitor:
@@ -104,7 +99,9 @@ class _ClipboardMonitor:
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
-        print("剪贴板监控已启动，复制链接后按回车确认...")
+        print(
+            "Clipboard monitoring started. Copy links, then press Enter to confirm..."
+        )
 
     def stop(self) -> list[str]:
         self._stop.set()

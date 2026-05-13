@@ -7,7 +7,7 @@ import logging
 import signal
 from pathlib import Path
 
-from yt_pipeline.constants import DOWNLOAD_CONCURRENCY
+from yt_pipeline.config import DOWNLOAD_CONCURRENCY
 from yt_pipeline.model import Task, States, TERMINAL_STATES
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.download_worker import download_worker
@@ -75,12 +75,16 @@ async def run_pipeline(
 
     downloaders = [
         asyncio.create_task(
-            download_worker(sem, pending_queue, assessment_queue, tasks, shutdown, state_file)
+            download_worker(
+                sem, pending_queue, assessment_queue, tasks, shutdown, state_file
+            )
         )
         for _ in range(DOWNLOAD_CONCURRENCY)
     ]
     assessment_task = asyncio.create_task(
-        assessment_worker(assessment_queue, transcode_queue, tasks, shutdown, state_file)
+        assessment_worker(
+            assessment_queue, transcode_queue, tasks, shutdown, state_file
+        )
     )
     transcode_task = asyncio.create_task(
         transcode_worker(transcode_queue, tasks, shutdown, state_file)

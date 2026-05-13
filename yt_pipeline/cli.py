@@ -7,7 +7,7 @@ import asyncio
 import logging
 import sys
 
-from yt_pipeline.constants import STATE_FILE
+from yt_pipeline.config import STATE_FILE
 from yt_pipeline.pipeline import ShutdownManager, run_pipeline
 from yt_pipeline.model import Task, RESUME_RESET
 from yt_pipeline.persistence import load_progress
@@ -31,31 +31,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "--resume", "-y",
+        "--resume",
+        "-y",
         action="store_true",
         help="Auto-resume from saved progress.",
     )
     group.add_argument(
-        "--fresh", "-n",
+        "--fresh",
+        "-n",
         action="store_true",
         help="Discard saved progress and start fresh.",
     )
     parser.add_argument(
-        "--file", "-f",
+        "--file",
+        "-f",
         help="Read URLs from a text file (one per line).",
     )
     parser.add_argument(
-        "urls", nargs="*",
+        "urls",
+        nargs="*",
         help="Video URLs or YouTube IDs to process.",
     )
     return parser.parse_args(argv)
 
 
-async def main_async(args: argparse.Namespace) -> None:
-    shutdown = ShutdownManager()
-    shutdown.attach(asyncio.get_running_loop())
-
-    # 加载/创建任务
+def prepare_tasks(args: argparse.Namespace) -> list[Task]:
     saved_tasks = load_progress(STATE_FILE)
 
     should_resume = False
@@ -90,24 +90,25 @@ async def main_async(args: argparse.Namespace) -> None:
         urls = collect_urls(args.urls, args.file)
         if not urls:
             logger.info("No URLs to process. Exiting.")
-            return
-        tasks = [Task(url) for url in urls]
+            return []
+        return [Task(url) for url in urls]
 
-    try:
-        await run_pipeline(tasks, shutdown, STATE_FILE)
-    except asyncio.CancelledError:
-        logger.info("Pipeline interrupted by user.")
-    except KeyboardInterrupt:
-        shutdown.event.set()
-        logger.info("KeyboardInterrupt caught, waiting for cleanup...")
-    finally:
-        logger.info("Cleanup done.")
+    return tasks
+
+
+async def _run_pipeline(tasks: list[Task]) -> None:
+    shutdown = ShutdownManager()
+    shutdown.attach(asyncio.get_running_loop())
+    await run_pipeline(tasks, shutdown, STATE_FILE)
 
 
 def main() -> None:
     _setup_logging()
     args = parse_args()
     try:
-        asyncio.run(main_async(args))
+        tasks = prepare_tasks(args)
+        if not tasks:
+            return
+        asyncio.run(_run_pipeline(tasks))
     except KeyboardInterrupt:
         print("\nBye.")

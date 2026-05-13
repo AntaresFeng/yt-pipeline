@@ -15,7 +15,7 @@
 | `assessment_worker.py` | ffprobe 探测、策略决策、封面处理、ffmpeg 命令构建 |
 | `transcode_worker.py` | ffmpeg 转码执行 + 优雅退出（独立进程组） |
 | `model.py` | Task、States、StreamSpec、RESUME_RESET |
-| `constants.py` | 业务常量 |
+| `config.py` | 配置参数和业务常量 |
 | `persistence.py` | progress.json 读写（原子写入 .tmp → replace） |
 | `utils.py` | handle_worker_error |
 | `cli.py` | CLI 入口 |

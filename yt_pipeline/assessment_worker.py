@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from yt_pipeline.constants import STRATEGY_SKIP, THUMBNAIL_MIN_HEIGHT
+import yt_pipeline.config as C
 from yt_pipeline.model import Task, States, StreamSpec
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
@@ -81,19 +81,17 @@ async def probe(file_path: Path) -> StreamSpec:
 
 async def process_thumbnail(thumbnail_path: Path) -> None:
     """如果封面高度 < THUMBNAIL_MIN_HEIGHT，裁剪 16:9 后 2x 超分。"""
-    from yt_pipeline.constants import TARGET_ASPECT_RATIO
-
     spec = await probe(thumbnail_path)
-    if spec.height >= THUMBNAIL_MIN_HEIGHT:
+    if spec.height >= C.THUMBNAIL_MIN_HEIGHT:
         logger.info(
             "封面高度 %dpx >= %d，跳过封面处理。",
             spec.height,
-            THUMBNAIL_MIN_HEIGHT,
+            C.THUMBNAIL_MIN_HEIGHT,
         )
         return
 
     # Python 端计算 16:9 裁剪尺寸，避免 ffmpeg if() 表达式在 Windows 下解析异常
-    if spec.width / spec.height >= TARGET_ASPECT_RATIO:
+    if spec.width / spec.height >= C.TARGET_ASPECT_RATIO:
         crop_w = spec.height * 16 // 9
         crop_h = spec.height
     else:
@@ -109,6 +107,7 @@ async def process_thumbnail(thumbnail_path: Path) -> None:
         "ffmpeg", "-hide_banner", "-y",
         "-i", str(thumbnail_path),
         "-vf", f"crop={crop_w}:{crop_h},scale=iw*2:ih*2:flags=lanczos",
+        "-frames:v", "1", "-update", "1",
         str(upscaled),
     ])
     # fmt: on
@@ -125,27 +124,18 @@ def decide_video_strategy(spec: StreamSpec) -> tuple[str, str | None]:
         (strategy, reason) — strategy 为 "skip" | "upscale_4k" | "pad_1600"，
         非 skip 时 reason 为 None。
     """
-    from yt_pipeline.constants import (
-        STRATEGY_SKIP,
-        STRATEGY_UPSCALE_4K,
-        STRATEGY_PAD_1600,
-        MIN_SHORT_EDGE,
-        MAX_SHORT_EDGE,
-        RATIO_THRESHOLD,
-    )
-
     if spec.width < spec.height:
-        return STRATEGY_SKIP, "竖屏视频，按规则跳过"
+        return C.STRATEGY_SKIP, "竖屏视频，按规则跳过"
 
     short_edge = spec.short_edge
-    if short_edge <= MIN_SHORT_EDGE:
-        return STRATEGY_SKIP, f"短边 {short_edge} <= {MIN_SHORT_EDGE}，按规则跳过"
-    if short_edge >= MAX_SHORT_EDGE:
-        return STRATEGY_SKIP, f"短边 {short_edge} >= {MAX_SHORT_EDGE}，按规则跳过"
+    if short_edge <= C.MIN_SHORT_EDGE:
+        return C.STRATEGY_SKIP, f"短边 {short_edge} <= {C.MIN_SHORT_EDGE}，按规则跳过"
+    if short_edge >= C.MAX_SHORT_EDGE:
+        return C.STRATEGY_SKIP, f"短边 {short_edge} >= {C.MAX_SHORT_EDGE}，按规则跳过"
 
-    if spec.ratio < RATIO_THRESHOLD:
-        return STRATEGY_UPSCALE_4K, None
-    return STRATEGY_PAD_1600, None
+    if spec.ratio < C.RATIO_THRESHOLD:
+        return C.STRATEGY_UPSCALE_4K, None
+    return C.STRATEGY_PAD_1600, None
 
 
 def build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Path]:
@@ -154,25 +144,14 @@ def build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Pa
     Returns:
         (command, output_path)
     """
-    from yt_pipeline.constants import (
-        STRATEGY_UPSCALE_4K,
-        STRATEGY_PAD_1600,
-        TARGET_4K_WIDTH,
-        TARGET_4K_HEIGHT,
-        TARGET_PAD_HEIGHT,
-        FFMPEG_CRF,
-        FFMPEG_PRESET,
-        FFMPEG_AUDIO_BITRATE,
-    )
-
-    if strategy == STRATEGY_UPSCALE_4K:
+    if strategy == C.STRATEGY_UPSCALE_4K:
         output = video_path.with_name(f"{video_path.stem}_processed_4k.mp4")
-        vf = f"scale={TARGET_4K_WIDTH}:{TARGET_4K_HEIGHT}:flags=lanczos"
-    elif strategy == STRATEGY_PAD_1600:
+        vf = f"scale={C.TARGET_4K_WIDTH}:{C.TARGET_4K_HEIGHT}:flags=lanczos"
+    elif strategy == C.STRATEGY_PAD_1600:
         output = video_path.with_name(f"{video_path.stem}_processed_pad1600.mp4")
         vf = (
             f"scale=trunc(iw/2)*2:trunc(ih/2)*2,"
-            f"pad=iw:{TARGET_PAD_HEIGHT}:0:({TARGET_PAD_HEIGHT}-ih)/2:black"
+            f"pad=iw:{C.TARGET_PAD_HEIGHT}:0:({C.TARGET_PAD_HEIGHT}-ih)/2:black"
         )
     else:
         raise ValueError(f"未知策略: {strategy}")
@@ -183,10 +162,10 @@ def build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Pa
         "-i", str(video_path),
         "-vf", vf,
         "-map", "0:v:0", "-map", "0:a?",
-        "-c:v", "libx264", "-crf", str(FFMPEG_CRF),
-        "-preset", FFMPEG_PRESET,
+        "-c:v", "libx264", "-crf", str(C.FFMPEG_CRF),
+        "-preset", C.FFMPEG_PRESET,
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", FFMPEG_AUDIO_BITRATE,
+        "-c:a", "aac", "-b:a", C.FFMPEG_AUDIO_BITRATE,
         "-movflags", "+faststart",
         str(output),
     ]
@@ -231,7 +210,7 @@ async def assessment_worker(
                 thumb_spec = None
                 video_spec = await probe(video_path)
 
-            if thumb_spec is not None and thumb_spec.height < THUMBNAIL_MIN_HEIGHT:
+            if thumb_spec is not None and thumb_spec.height < C.THUMBNAIL_MIN_HEIGHT:
                 task.state = States.PROCESSING_COVER
                 save_all_progress(tasks, state_file)
                 try:
@@ -242,7 +221,7 @@ async def assessment_worker(
             task.state = States.PROBING_VIDEO
             strategy, reason = decide_video_strategy(video_spec)
 
-            if strategy == STRATEGY_SKIP:
+            if strategy == C.STRATEGY_SKIP:
                 task.state = States.DONE
                 save_all_progress(tasks, state_file)
                 logger.info("[%s] Skipped: %s", task.url, reason)

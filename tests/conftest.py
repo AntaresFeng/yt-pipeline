@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from yt_pipeline import constants
+from yt_pipeline import config as constants
 from yt_pipeline.model import StreamSpec
 from yt_pipeline.pipeline import ShutdownManager
 from yt_pipeline.model import States
@@ -86,7 +86,7 @@ async def pipeline_env(tmp_path: Path, monkeypatch) -> AsyncGenerator[PipelineEn
         return StreamSpec(width=1920, height=1440)
 
     monkeypatch.setattr("yt_pipeline.download_worker.download_video", mock_download)
-    monkeypatch.setattr("yt_pipeline.transcode_worker.transcode_video", mock_transcode)
+    monkeypatch.setattr("yt_pipeline.transcode_worker.run_transcode", mock_transcode)
     monkeypatch.setattr("yt_pipeline.assessment_worker.probe", mock_probe)
 
     yield PipelineEnv(

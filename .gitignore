@@ -33,6 +33,10 @@ Thumbs.db
 *.todo
 TODO
 
+# Local config (machine-specific)
+.python-version
+test_url.txt
+
 # Runtime artifacts
 progress.json
 
