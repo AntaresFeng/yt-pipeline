@@ -29,3 +29,69 @@ class TestParseArgs:
     def test_parse_args_resume_fresh_exclusive(self):
         with pytest.raises(SystemExit):
             parse_args(["--resume", "--fresh"])
+
+
+class TestPrepareTasks:
+    def test_prepare_tasks_fresh(
+        self, state_file, mock_load_progress, mock_collect_urls
+    ):
+        mock_load_progress([Task(url="https://old.com", state=States.DOWNLOADING)])
+        mock_collect_urls(["https://a.com"])
+        state_file.write_text("{}", encoding="utf-8")  # create the file
+
+        args = argparse.Namespace(resume=False, fresh=True, file=None, urls=[])
+        tasks = prepare_tasks(args)
+
+        assert not state_file.exists()
+        assert len(tasks) == 1
+        assert tasks[0].url == "https://a.com"
+        assert tasks[0].state == States.PENDING
+
+    def test_prepare_tasks_resume(self, state_file, mock_load_progress):
+        saved = [Task(url="https://old.com", state=States.DOWNLOADING)]
+        mock_load_progress(saved)
+
+        args = argparse.Namespace(resume=True, fresh=False, file=None, urls=[])
+        tasks = prepare_tasks(args)
+
+        assert len(tasks) == 1
+        assert (
+            tasks[0].state == States.PENDING
+        )  # DOWNLOADING → PENDING via RESUME_RESET
+
+    def test_prepare_tasks_prompt_yes(
+        self, state_file, mock_load_progress, monkeypatch
+    ):
+        saved = [Task(url="https://old.com", state=States.DOWNLOADING)]
+        mock_load_progress(saved)
+        monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+
+        args = argparse.Namespace(resume=False, fresh=False, file=None, urls=[])
+        tasks = prepare_tasks(args)
+
+        assert tasks[0].state == States.PENDING
+
+    def test_prepare_tasks_prompt_no(
+        self, state_file, mock_load_progress, mock_collect_urls, monkeypatch
+    ):
+        saved = [Task(url="https://old.com", state=States.DOWNLOADING)]
+        mock_load_progress(saved)
+        mock_collect_urls(["https://new.com"])
+        state_file.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr("builtins.input", lambda prompt="": "n")
+
+        args = argparse.Namespace(resume=False, fresh=False, file=None, urls=[])
+        tasks = prepare_tasks(args)
+
+        assert not state_file.exists()
+        assert len(tasks) == 1
+        assert tasks[0].url == "https://new.com"
+
+    def test_prepare_tasks_no_urls(self, mock_load_progress, mock_collect_urls):
+        mock_load_progress(None)
+        mock_collect_urls([])
+
+        args = argparse.Namespace(resume=False, fresh=False, file=None, urls=[])
+        tasks = prepare_tasks(args)
+
+        assert tasks == []
