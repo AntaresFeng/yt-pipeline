@@ -86,14 +86,13 @@ def prepare_tasks(args: argparse.Namespace) -> list[Task]:
             new_state = RESUME_RESET.get(task.state)
             if new_state is not None:
                 task.state = new_state
+        return tasks
     else:
         urls = collect_urls(args.urls, args.file)
         if not urls:
             logger.info("No URLs to process. Exiting.")
             return []
         return [Task(url) for url in urls]
-
-    return tasks
 
 
 async def _run_pipeline(tasks: list[Task]) -> None:

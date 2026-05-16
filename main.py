@@ -4,3 +4,4 @@ from yt_pipeline.cli import main
 
 if __name__ == "__main__":
     main()
+    input("Processing complete. Press Enter to exit...")

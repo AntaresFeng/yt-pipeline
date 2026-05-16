@@ -20,6 +20,9 @@ def load_progress(state_file: Path) -> list[Task] | None:
         tasks = [Task(**t) for t in data["tasks"]]
         logger.info(f"Loaded {len(tasks)} tasks from saved state.")
         return tasks
+    except json.JSONDecodeError:
+        logger.error("Failed to parse progress file: invalid JSON.")
+        return None
     except Exception as e:
         logger.error(f"Failed to load progress: {e}")
         return None

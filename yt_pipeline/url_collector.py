@@ -69,6 +69,10 @@ def _confirm(urls: list[str]) -> list[str]:
     if not urls:
         print("No valid links detected.")
         return []
+    if len(urls) == 1:
+        print(f"\nDetected 1 valid link: {urls[0]}")
+        return urls
+
     print(f"\nDetected {len(urls)} valid links:")
     for i, url in enumerate(urls, 1):
         print(f"  {i}. {url}")

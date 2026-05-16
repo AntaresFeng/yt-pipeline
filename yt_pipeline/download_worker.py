@@ -52,8 +52,6 @@ def find_thumbnail(video_path: Path, video_id: str) -> Path | None:
     return uniq[0]
 
 
-# ── 同步辅助函数（在线程池中执行）──────────────────────────────
-
 def _do_download(url: str) -> dict:
     """同步下载（在线程池中执行）。"""
     import yt_dlp
@@ -106,10 +104,11 @@ def generate_credits(info: dict, source_url: str, video_path: Path) -> None:
     channel = info.get("channel") or "未知"
     title = info.get("title") or "未知"
     description = info.get("description") or ""
+    video_url = info.get("webpage_url") or info.get("original_url") or source_url
 
     out_path = video_path.with_suffix(".description")
     text = (
-        f"{source_url}\n"
+        f"{video_url}\n"
         f"原作者：{channel}\n"
         f"原标题：{title}\n"
         "转载经原作者允许\n"
@@ -117,12 +116,11 @@ def generate_credits(info: dict, source_url: str, video_path: Path) -> None:
         f"{description}"
     )
     out_path.write_text(text, encoding="utf-8")
+    return out_path
 
-
-# ── 异步入口 ──────────────────────────────────────────────────
 
 async def download_video(task: Task, shutdown: ShutdownManager) -> None:
-    """异步下载视频，填充 task 的 video_id/video_path/thumbnail_path/credits_path。"""
+    """异步下载视频，填充 task 的 video_id/video_path"""
     if shutdown.is_set:
         raise asyncio.CancelledError("Shutdown before download")
 
@@ -147,11 +145,8 @@ async def download_video(task: Task, shutdown: ShutdownManager) -> None:
             break
 
     generate_credits(info, task.url, video_path)
-
     logger.info("[%s] Download done", task.url)
 
-
-# ── Worker 协程 ────────────────────────────────────────────────
 
 async def download_worker(
     sem: asyncio.Semaphore,
