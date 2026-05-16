@@ -1,6 +1,7 @@
 '''cli 单元测试：参数解析、任务准备、主流程调度。'''
 
 import argparse
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -95,3 +96,36 @@ class TestPrepareTasks:
         tasks = prepare_tasks(args)
 
         assert tasks == []
+
+
+class TestMain:
+    def test_main_no_tasks(self, monkeypatch):
+        monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.parse_args", lambda: argparse.Namespace(
+            resume=False, fresh=False, file=None, urls=[]
+        ))
+        monkeypatch.setattr("yt_pipeline.cli.prepare_tasks", lambda args: [])
+        mock_run = MagicMock()
+        monkeypatch.setattr("asyncio.run", mock_run)
+
+        from yt_pipeline.cli import main
+
+        main()
+        mock_run.assert_not_called()
+
+    def test_main_with_tasks(self, monkeypatch):
+        monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.parse_args", lambda: argparse.Namespace(
+            resume=False, fresh=False, file=None, urls=[]
+        ))
+        monkeypatch.setattr(
+            "yt_pipeline.cli.prepare_tasks",
+            lambda args: [Task(url="https://a.com")],
+        )
+        mock_run = MagicMock()
+        monkeypatch.setattr("asyncio.run", mock_run)
+
+        from yt_pipeline.cli import main
+
+        main()
+        mock_run.assert_called_once()
