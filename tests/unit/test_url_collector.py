@@ -1,6 +1,5 @@
 """url_collector 单元测试：URL 收集、过滤、文件读取。"""
 
-import pytest
 from pathlib import Path
 
 from yt_pipeline.url_collector import collect_urls, _filter

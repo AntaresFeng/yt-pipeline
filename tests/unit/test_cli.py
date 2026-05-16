@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from yt_pipeline.cli import parse_args, prepare_tasks
-from yt_pipeline.model import Task, States, RESUME_RESET
+from yt_pipeline.model import Task, States
 
 
 class TestParseArgs:
