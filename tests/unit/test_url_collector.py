@@ -1,5 +1,6 @@
 """url_collector 单元测试：URL 收集、过滤、文件读取。"""
 
+import pytest
 from pathlib import Path
 
 from yt_pipeline.url_collector import collect_urls, _filter
@@ -47,3 +48,65 @@ class TestFilterIsUrlVariants:
             ]
         )
         assert result == ["https://youtube.com/watch?v=x", "AbCdEfGhIjK"]
+
+
+def make_input_sequence(responses: list[str]):
+    """返回一个 input() 替身，依次返回 responses，用完抛 EOFError。"""
+    it = iter(responses)
+
+    def _input(prompt=""):
+        try:
+            return next(it)
+        except StopIteration:
+            raise EOFError
+
+    return _input
+
+
+class TestFromInput:
+    def test_from_input_typed_and_clipboard(self, monkeypatch):
+        class FakeMonitor:
+            def start(self): ...
+            def stop(self):
+                return ["https://clip.com"]
+
+        monkeypatch.setattr(
+            "yt_pipeline.url_collector._ClipboardMonitor", FakeMonitor
+        )
+        monkeypatch.setattr(
+            "builtins.input", make_input_sequence(["https://typed.com", "y"])
+        )
+        result = collect_urls()
+        assert "https://typed.com" in result
+        assert "https://clip.com" in result
+
+    def test_from_input_cancel_eof(self, monkeypatch):
+        class FakeMonitor:
+            def __init__(self):
+                self.stopped = False
+
+            def start(self): ...
+
+            def stop(self):
+                self.stopped = True
+                return []
+
+        fake = FakeMonitor()
+        monkeypatch.setattr(
+            "yt_pipeline.url_collector._ClipboardMonitor",
+            lambda: fake,
+        )
+        monkeypatch.setattr("builtins.input", make_input_sequence([]))
+        result = collect_urls()
+        assert result == []
+        assert fake.stopped
+
+    def test_clipboard_monitor_no_pyperclip(self, monkeypatch):
+        monkeypatch.setattr("yt_pipeline.url_collector.pyperclip", None)
+        from yt_pipeline.url_collector import _ClipboardMonitor
+
+        monitor = _ClipboardMonitor()
+        monitor.start()
+        result = monitor.stop()
+        assert monitor._thread is None
+        assert result == []
