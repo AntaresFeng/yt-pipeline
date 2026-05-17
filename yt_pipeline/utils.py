@@ -16,6 +16,6 @@ def handle_worker_error(
 ) -> None:
     """异常处理：标记 FAILED + 持久化 + 日志。"""
     task.state = States.FAILED
-    task.error = str(error)
+    task.errors.append(str(error))
     save_all_progress(tasks, state_file)
-    logger.error("[%s] failed: %s", task.url, error)
+    logger.error("[%s] failed (attempt %d): %s", task.url, len(task.errors), error)
