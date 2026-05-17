@@ -17,6 +17,14 @@ def load_progress(state_file: Path) -> list[Task] | None:
 
     try:
         data = json.loads(state_file.read_text(encoding="utf-8"))
+        for t in data["tasks"]:
+            # 旧格式兼容：error → errors
+            if "errors" not in t:
+                if "error" in t and t["error"] is not None:
+                    t["errors"] = [t.pop("error")]
+                else:
+                    t["errors"] = []
+            t.pop("error", None)
         tasks = [Task(**t) for t in data["tasks"]]
         logger.info(f"Loaded {len(tasks)} tasks from saved state.")
         return tasks
