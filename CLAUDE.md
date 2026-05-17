@@ -28,7 +28,8 @@ python main.py                        # 运行流水线
 pytest tests/test_xxx.py -v           # 模块测试（日常修改后）
 pytest tests/test_xxx.py::name -v     # 单函数测试
 pytest tests/ -v                      # 全量测试（重构/大修后）
-ruff check .                          # 代码检查
+ruff check                            # 代码检查
+ruff format                           # 代码格式化
 ```
 
 ## 处理策略
