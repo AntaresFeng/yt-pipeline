@@ -100,10 +100,15 @@ async def run_pipeline(
 
     save_all_progress(tasks, state_file)
 
-    if all(t.state in TERMINAL_STATES for t in tasks):
+    failed_count = sum(1 for t in tasks if t.state == States.FAILED)
+    if all(t.state == States.DONE for t in tasks):
         logger.info("All tasks processed.")
         if state_file.exists():
             state_file.unlink()
+    elif failed_count:
+        logger.info(
+            "Pipeline stopped, %d tasks failed. Resume to retry.", failed_count
+        )
     else:
         logger.info("Pipeline stopped, progress saved.")
 
