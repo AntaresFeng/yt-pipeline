@@ -170,9 +170,9 @@ class TestFailure:
         await run_pipeline([task], shutdown, state_file)
 
         assert task.state == States.FAILED
-        assert "ffprobe" in task.error
-        # FAILED 是 TERMINAL_STATE，progress.json 会被删除
-        assert not state_file.exists()
+        assert "ffprobe" in task.errors[-1]
+        # FAILED 任务保留 progress.json 以便重试
+        assert state_file.exists()
 
     async def test_transcode_ffmpeg_failure(
         self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown, monkeypatch,
@@ -188,6 +188,66 @@ class TestFailure:
         await run_pipeline([task], shutdown, state_file)
 
         assert task.state == States.FAILED
-        assert "ffmpeg" in task.error
-        # FAILED 是 TERMINAL_STATE，progress.json 会被删除
-        assert not state_file.exists()
+        assert "ffmpeg" in task.errors[-1]
+        # FAILED 任务保留 progress.json 以便重试
+        assert state_file.exists()
+
+
+class TestResumeTerminalStates:
+    async def test_resume_filters_done_tasks(
+        self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
+    ):
+        """resume 时 DONE 任务被过滤，不进入 pipeline。"""
+        done_task = Task(url="https://youtube.com/watch?v=done1", state=States.DONE)
+        pending_task = Task(url="https://youtube.com/watch?v=testvid", state=States.PENDING)
+
+        state_file = pipeline_env / "progress.json"
+        save_all_progress([done_task, pending_task], state_file)
+
+        # 模拟 prepare_tasks 过滤：只保留非 DONE 任务
+        tasks = [t for t in [done_task, pending_task] if t.state != States.DONE]
+        await run_pipeline(tasks, shutdown, state_file)
+
+        assert pending_task.state == States.DONE
+        assert done_task.state == States.DONE
+        assert len(mock_transcode) == 1  # 只有 pending_task 走了转码
+
+    async def test_resume_failed_to_pending(
+        self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
+    ):
+        """FAILED 任务经 RESUME_RESET 回退到 PENDING，重新走完全链路。"""
+        mock_subprocess(ffprobe=(0, '{"streams":[{"width":1920,"height":1081}]}', ''))
+        task = Task(url="https://youtube.com/watch?v=testvid", state=States.FAILED, errors=["old error"])
+
+        # 模拟 prepare_tasks 中的 RESUME_RESET 回退
+        assert task.state in RESUME_RESET
+        task.state = RESUME_RESET[task.state]  # FAILED → PENDING
+
+        state_file = pipeline_env / "progress.json"
+        await run_pipeline([task], shutdown, state_file)
+
+        assert task.state == States.DONE
+        assert len(mock_transcode) == 1
+        assert "old error" in task.errors  # 旧错误保留
+
+    async def test_mixed_done_failed_keeps_progress(
+        self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown, monkeypatch,
+    ):
+        """混合 DONE+FAILED 场景：progress.json 保留（因为有 FAILED 任务）。"""
+        async def _failing_transcode(cmd, shutdown_mgr, *, label=""):
+            raise RuntimeError("ffmpeg exited with code 1")
+
+        monkeypatch.setattr("yt_pipeline.transcode_worker.run_transcode", _failing_transcode)
+
+        mock_subprocess(ffprobe=(0, '{"streams":[{"width":1920,"height":1081}]}', ''))
+
+        # 创建一个 DONE 任务和一个会失败的任务
+        done_task = Task(url="https://youtube.com/watch?v=done1", state=States.DONE)
+        fail_task = Task(url="https://youtube.com/watch?v=fail1")
+
+        state_file = pipeline_env / "progress.json"
+        await run_pipeline([done_task, fail_task], shutdown, state_file)
+
+        assert done_task.state == States.DONE
+        assert fail_task.state == States.FAILED
+        assert state_file.exists()  # FAILED 存在，progress.json 保留
