@@ -9,7 +9,7 @@ import sys
 
 from yt_pipeline.config import STATE_FILE
 from yt_pipeline.pipeline import ShutdownManager, run_pipeline
-from yt_pipeline.model import Task, RESUME_RESET
+from yt_pipeline.model import Task, States, RESUME_RESET
 from yt_pipeline.persistence import load_progress
 from yt_pipeline.url_collector import collect_urls
 
@@ -81,10 +81,22 @@ def prepare_tasks(args: argparse.Namespace) -> list[Task]:
                 STATE_FILE.unlink()
 
     if should_resume and saved_tasks:
-        tasks = saved_tasks
+        # 过滤已完成的任务
+        done_tasks = [t for t in saved_tasks if t.state == States.DONE]
+        if done_tasks:
+            logger.info("Skipping %d completed tasks.", len(done_tasks))
+        tasks = [t for t in saved_tasks if t.state != States.DONE]
+
+        # 中断态/失败态回退
         for task in tasks:
             new_state = RESUME_RESET.get(task.state)
             if new_state is not None:
+                if task.state == States.FAILED:
+                    logger.info(
+                        "Retrying failed task: %s (previous errors: %d)",
+                        task.url,
+                        len(task.errors),
+                    )
                 task.state = new_state
         return tasks
     else:
