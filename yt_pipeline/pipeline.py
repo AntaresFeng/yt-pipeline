@@ -71,6 +71,9 @@ async def run_pipeline(
         elif task.state == States.PROCESSING_VIDEO:
             await transcode_queue.put(task)
 
+    for _ in range(DOWNLOAD_CONCURRENCY):
+        await pending_queue.put(None)
+
     sem = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
 
     downloaders = [

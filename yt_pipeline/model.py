@@ -19,15 +19,13 @@ class States:
 class Task:
     url: str
     state: str = States.PENDING
-    errors: list[str] = field(default_factory=list)  # 累积错误，重试时保留历史
+    errors: list[str] = field(default_factory=list)
     video_id: str | None = None
     video_path: str | None = None
     thumbnail_path: str | None = None
     ffmpeg_command: list[str] | None = None
 
 
-# 终端状态：正常执行流程中不再处理（恢复时 FAILED 会重置为 PENDING 重试）
-TERMINAL_STATES = frozenset({States.DONE, States.FAILED})
 
 # 中断恢复时的状态重置映射
 RESUME_RESET: dict[str, str] = {

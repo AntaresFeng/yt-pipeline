@@ -11,12 +11,14 @@ logger = logging.getLogger("pipeline.persistence")
 
 def load_progress(state_file: Path) -> list[Task] | None:
     """从文件加载任务列表，不存在或损坏时返回 None。"""
-    if not state_file.exists():
+    try:
+        raw = state_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
         logger.info("No saved state found.")
         return None
 
     try:
-        data = json.loads(state_file.read_text(encoding="utf-8"))
+        data = json.loads(raw)
         for t in data["tasks"]:
             # 旧格式兼容：error → errors
             if "errors" not in t:
@@ -42,5 +44,5 @@ def save_all_progress(tasks: list[Task], state_file: Path) -> None:
         "tasks": [asdict(t) for t in tasks]
     }
     tmp = state_file.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp.write_text(json.dumps(data), encoding="utf-8")
     tmp.replace(state_file)

@@ -58,53 +58,53 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def prepare_tasks(args: argparse.Namespace) -> list[Task]:
     saved_tasks = load_progress(STATE_FILE)
 
-    should_resume = False
-    if saved_tasks:
-        if args.resume:
-            should_resume = True
-            logger.info("Found previous progress. Auto-resuming (-y).")
-        elif args.fresh:
-            logger.info("Found previous progress. Auto-discarding (-n).")
+    if not saved_tasks:
+        return _new_tasks(args)
+
+    if args.fresh:
+        logger.info("Found previous progress. Auto-discarding (-n).")
+        STATE_FILE.unlink()
+        return _new_tasks(args)
+
+    if not args.resume:
+        try:
+            answer = (
+                input("Found previous progress. Resume? [Y/n] ").strip().lower()
+            )
+            should_resume = answer in ("", "y", "yes")
+        except (EOFError, KeyboardInterrupt, OSError):
+            should_resume = False
+        if not should_resume:
+            logger.info("Starting fresh, discarding old state.")
             STATE_FILE.unlink()
-        else:
-            try:
-                answer = (
-                    input("Found previous progress. Resume? [Y/n] ").strip().lower()
+            return _new_tasks(args)
+
+    logger.info("Resuming from saved state.")
+
+    done_tasks = [t for t in saved_tasks if t.state == States.DONE]
+    if done_tasks:
+        logger.info("Skipping %d completed tasks.", len(done_tasks))
+    tasks = [t for t in saved_tasks if t.state != States.DONE]
+
+    for task in tasks:
+        new_state = RESUME_RESET.get(task.state)
+        if new_state is not None:
+            if task.state == States.FAILED:
+                logger.info(
+                    "Retrying failed task: %s (previous errors: %d)",
+                    task.url,
+                    len(task.errors),
                 )
-                should_resume = answer in ("", "y", "yes")
-            except (EOFError, KeyboardInterrupt, OSError):
-                should_resume = False
-            if should_resume:
-                logger.info("Resuming from saved state.")
-            else:
-                logger.info("Starting fresh, discarding old state.")
-                STATE_FILE.unlink()
+            task.state = new_state
+    return tasks
 
-    if should_resume and saved_tasks:
-        # 过滤已完成的任务
-        done_tasks = [t for t in saved_tasks if t.state == States.DONE]
-        if done_tasks:
-            logger.info("Skipping %d completed tasks.", len(done_tasks))
-        tasks = [t for t in saved_tasks if t.state != States.DONE]
 
-        # 中断态/失败态回退
-        for task in tasks:
-            new_state = RESUME_RESET.get(task.state)
-            if new_state is not None:
-                if task.state == States.FAILED:
-                    logger.info(
-                        "Retrying failed task: %s (previous errors: %d)",
-                        task.url,
-                        len(task.errors),
-                    )
-                task.state = new_state
-        return tasks
-    else:
-        urls = collect_urls(args.urls, args.file)
-        if not urls:
-            logger.info("No URLs to process. Exiting.")
-            return []
-        return [Task(url) for url in urls]
+def _new_tasks(args: argparse.Namespace) -> list[Task]:
+    urls = collect_urls(args.urls, args.file)
+    if not urls:
+        logger.info("No URLs to process. Exiting.")
+        return []
+    return [Task(url) for url in urls]
 
 
 async def _run_pipeline(tasks: list[Task]) -> None:

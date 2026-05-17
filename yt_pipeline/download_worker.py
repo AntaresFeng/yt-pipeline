@@ -161,13 +161,14 @@ async def download_worker(
         if shutdown.is_set:
             break
 
-        if not any(t.state == States.PENDING for t in tasks):
-            break
-
         try:
             task = await asyncio.wait_for(pending_queue.get(), timeout=0.5)
         except asyncio.TimeoutError:
             continue
+
+        if task is None:
+            pending_queue.task_done()
+            break
 
         if task.state != States.PENDING:
             pending_queue.task_done()
