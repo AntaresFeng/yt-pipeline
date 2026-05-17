@@ -38,3 +38,18 @@ class TestFullPipeline:
         assert task.state == States.DONE
         assert any("pad=iw:1600" in " ".join(cmd) for cmd in mock_transcode)
         assert len(mock_transcode) == 1
+
+
+class TestSkipStrategy:
+    async def test_skip_strategy(
+        self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
+    ):
+        """1920x1080 → skip：不经 processing_video，run_transcode 未被调用。"""
+        mock_subprocess(ffprobe=(0, '{"streams":[{"width":1920,"height":1080}]}', ''))
+        task = Task(url="https://youtube.com/watch?v=testvid")
+
+        state_file = pipeline_env / "progress.json"
+        await run_pipeline([task], shutdown, state_file)
+
+        assert task.state == States.DONE
+        assert len(mock_transcode) == 0
