@@ -109,9 +109,7 @@ async def run_pipeline(
         if state_file.exists():
             state_file.unlink()
     elif failed_count:
-        logger.info(
-            "Pipeline stopped, %d tasks failed. Resume to retry.", failed_count
-        )
+        logger.info("Pipeline stopped, %d tasks failed. Resume to retry.", failed_count)
     else:
         logger.info("Pipeline stopped, progress saved.")
 

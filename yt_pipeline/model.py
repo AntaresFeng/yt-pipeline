@@ -26,7 +26,6 @@ class Task:
     ffmpeg_command: list[str] | None = None
 
 
-
 # 中断恢复时的状态重置映射
 RESUME_RESET: dict[str, str] = {
     States.DOWNLOADING: States.PENDING,

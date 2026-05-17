@@ -68,9 +68,7 @@ def prepare_tasks(args: argparse.Namespace) -> list[Task]:
 
     if not args.resume:
         try:
-            answer = (
-                input("Found previous progress. Resume? [Y/n] ").strip().lower()
-            )
+            answer = input("Found previous progress. Resume? [Y/n] ").strip().lower()
             should_resume = answer in ("", "y", "yes")
         except (EOFError, KeyboardInterrupt, OSError):
             should_resume = False

@@ -9,6 +9,7 @@ from yt_pipeline.model import Task
 
 logger = logging.getLogger("pipeline.persistence")
 
+
 def load_progress(state_file: Path) -> list[Task] | None:
     """从文件加载任务列表，不存在或损坏时返回 None。"""
     try:
@@ -40,9 +41,7 @@ def load_progress(state_file: Path) -> list[Task] | None:
 
 def save_all_progress(tasks: list[Task], state_file: Path) -> None:
     """原子写入所有任务状态。"""
-    data = {
-        "tasks": [asdict(t) for t in tasks]
-    }
+    data = {"tasks": [asdict(t) for t in tasks]}
     tmp = state_file.with_suffix(".tmp")
     tmp.write_text(json.dumps(data), encoding="utf-8")
     tmp.replace(state_file)
