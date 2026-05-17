@@ -157,3 +157,40 @@ class TestResume:
         assert task.state == States.DONE
         assert len(mock_transcode) == 1
         assert not state_file.exists()  # 全部终态，progress.json 被删除
+
+
+class TestFailure:
+    async def test_assessment_ffprobe_failure(
+        self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
+    ):
+        """ffprobe 异常退出：任务标记为 FAILED，error 包含 ffprobe。"""
+        mock_subprocess(
+            ffprobe=(1, '', 'ffprobe error: could not find stream info'),
+        )
+        task = Task(url="https://youtube.com/watch?v=testvid")
+
+        state_file = pipeline_env / "progress.json"
+        await run_pipeline([task], shutdown, state_file)
+
+        assert task.state == States.FAILED
+        assert "ffprobe" in task.error
+        # FAILED 是 TERMINAL_STATE，progress.json 会被删除
+        assert not state_file.exists()
+
+    async def test_transcode_ffmpeg_failure(
+        self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown, monkeypatch,
+    ):
+        """ffmpeg 异常退出：任务标记为 FAILED，error 包含 ffmpeg。"""
+        async def _failing_transcode(cmd, shutdown_mgr, *, label=""):
+            raise RuntimeError("ffmpeg exited with code 1")
+
+        monkeypatch.setattr("yt_pipeline.transcode_worker.run_transcode", _failing_transcode)
+
+        task = Task(url="https://youtube.com/watch?v=testvid")
+        state_file = pipeline_env / "progress.json"
+        await run_pipeline([task], shutdown, state_file)
+
+        assert task.state == States.FAILED
+        assert "ffmpeg" in task.error
+        # FAILED 是 TERMINAL_STATE，progress.json 会被删除
+        assert not state_file.exists()
