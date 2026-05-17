@@ -97,6 +97,35 @@ class TestPrepareTasks:
 
         assert tasks == []
 
+    def test_prepare_tasks_resume_failed(
+        self, state_file, mock_load_progress
+    ):
+        saved = [Task(url="https://old.com", state=States.FAILED, errors=["boom"])]
+        mock_load_progress(saved)
+
+        args = argparse.Namespace(resume=True, fresh=False, file=None, urls=[])
+        tasks = prepare_tasks(args)
+
+        assert len(tasks) == 1
+        assert tasks[0].state == States.PENDING  # FAILED → PENDING via RESUME_RESET
+        assert tasks[0].errors == ["boom"]  # errors 保留
+
+    def test_prepare_tasks_resume_filters_done(
+        self, state_file, mock_load_progress
+    ):
+        saved = [
+            Task(url="https://done.com", state=States.DONE),
+            Task(url="https://old.com", state=States.DOWNLOADING),
+        ]
+        mock_load_progress(saved)
+
+        args = argparse.Namespace(resume=True, fresh=False, file=None, urls=[])
+        tasks = prepare_tasks(args)
+
+        assert len(tasks) == 1
+        assert tasks[0].url == "https://old.com"
+        assert tasks[0].state == States.PENDING  # DOWNLOADING → PENDING
+
 
 class TestMain:
     def test_main_no_tasks(self, monkeypatch):
