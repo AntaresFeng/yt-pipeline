@@ -8,7 +8,7 @@ import signal
 from pathlib import Path
 
 from yt_pipeline.config import DOWNLOAD_CONCURRENCY
-from yt_pipeline.model import Task, States, TERMINAL_STATES
+from yt_pipeline.model import Task, States
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.download_worker import download_worker
 from yt_pipeline.assessment_worker import assessment_worker
