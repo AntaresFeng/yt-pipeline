@@ -136,3 +136,24 @@ class TestShutdown:
             tg.create_task(run_pipeline([task], shutdown, state_file))
 
         assert task.state == States.PROCESSING_VIDEO
+
+
+class TestResume:
+    async def test_resume_from_interrupted_state(
+        self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
+    ):
+        """从 downloading 中断状态恢复：RESUME_RESET 回退到 pending → 重新走完全链路。"""
+        task = Task(url="https://youtube.com/watch?v=testvid", state=States.DOWNLOADING)
+        state_file = pipeline_env / "progress.json"
+        save_all_progress([task], state_file)
+
+        # 模拟 resume：按 RESUME_RESET 回退
+        assert task.state in RESUME_RESET
+        task.state = RESUME_RESET[task.state]  # DOWNLOADING → PENDING
+
+        # 重新跑 pipeline
+        await run_pipeline([task], shutdown, state_file)
+
+        assert task.state == States.DONE
+        assert len(mock_transcode) == 1
+        assert not state_file.exists()  # 全部终态，progress.json 被删除
