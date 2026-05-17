@@ -1,13 +1,10 @@
 """集成测试共享 fixture：mock 外部边界，保留业务逻辑。"""
 
 import asyncio
-import json
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
-from yt_pipeline.model import Task, States
 from yt_pipeline.pipeline import ShutdownManager
 
 

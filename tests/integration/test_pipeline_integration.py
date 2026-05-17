@@ -1,13 +1,10 @@
 """Pipeline 集成测试：验证 worker 间编排逻辑。"""
 
 import asyncio
-from pathlib import Path
-
-import pytest
 
 from yt_pipeline.model import Task, States, RESUME_RESET
 from yt_pipeline.persistence import save_all_progress
-from yt_pipeline.pipeline import run_pipeline, ShutdownManager
+from yt_pipeline.pipeline import run_pipeline
 
 
 class TestFullPipeline:
