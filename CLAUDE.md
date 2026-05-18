@@ -44,7 +44,7 @@ ruff format                           # 代码格式化
 
 ## 状态机
 
-`pending → downloading → downloaded → probing_cover → processing_cover → probing_video → processing_video → done`
+`pending → downloading → downloaded → assessing → processing_video → done`
 
 任一步可进入 `failed`。中断恢复时按 `RESUME_RESET` 回退中间态到安全起点（`processing_video` 除外——直接恢复转码）。
 

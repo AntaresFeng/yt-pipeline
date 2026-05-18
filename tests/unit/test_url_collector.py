@@ -9,9 +9,7 @@ class TestCollectUrlsFromFile:
     def test_collect_urls_from_file(self, tmp_path: Path):
         path = tmp_path / "urls.txt"
         path.write_text(
-            "https://youtube.com/watch?v=abc123\n"
-            "AbCdEfGhIjK\n"
-            "\n",
+            "https://youtube.com/watch?v=abc123\nAbCdEfGhIjK\n\n",
             encoding="utf-8",
         )
         result = collect_urls(file_path=str(path))
@@ -29,9 +27,7 @@ class TestCollectUrlsFromFile:
 
 class TestCollectUrlsFromList:
     def test_collect_urls_from_list(self):
-        result = collect_urls(
-            urls=["https://a.com", "https://b.com", "https://a.com"]
-        )
+        result = collect_urls(urls=["https://a.com", "https://b.com", "https://a.com"])
         assert result == ["https://a.com", "https://b.com"]
 
 
@@ -69,9 +65,7 @@ class TestFromInput:
             def stop(self):
                 return ["https://clip.com"]
 
-        monkeypatch.setattr(
-            "yt_pipeline.url_collector._ClipboardMonitor", FakeMonitor
-        )
+        monkeypatch.setattr("yt_pipeline.url_collector._ClipboardMonitor", FakeMonitor)
         monkeypatch.setattr(
             "builtins.input", make_input_sequence(["https://typed.com", "y"])
         )

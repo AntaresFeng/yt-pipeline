@@ -1,4 +1,4 @@
-'''cli 单元测试：参数解析、任务准备、主流程调度。'''
+"""cli 单元测试：参数解析、任务准备、主流程调度。"""
 
 import argparse
 from unittest.mock import MagicMock
@@ -97,9 +97,7 @@ class TestPrepareTasks:
 
         assert tasks == []
 
-    def test_prepare_tasks_resume_failed(
-        self, state_file, mock_load_progress
-    ):
+    def test_prepare_tasks_resume_failed(self, state_file, mock_load_progress):
         saved = [Task(url="https://old.com", state=States.FAILED, errors=["boom"])]
         mock_load_progress(saved)
 
@@ -110,9 +108,7 @@ class TestPrepareTasks:
         assert tasks[0].state == States.PENDING  # FAILED → PENDING via RESUME_RESET
         assert tasks[0].errors == ["boom"]  # errors 保留
 
-    def test_prepare_tasks_resume_filters_done(
-        self, state_file, mock_load_progress
-    ):
+    def test_prepare_tasks_resume_filters_done(self, state_file, mock_load_progress):
         saved = [
             Task(url="https://done.com", state=States.DONE),
             Task(url="https://old.com", state=States.DOWNLOADING),
@@ -130,9 +126,10 @@ class TestPrepareTasks:
 class TestMain:
     def test_main_no_tasks(self, monkeypatch):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
-        monkeypatch.setattr("yt_pipeline.cli.parse_args", lambda: argparse.Namespace(
-            resume=False, fresh=False, file=None, urls=[]
-        ))
+        monkeypatch.setattr(
+            "yt_pipeline.cli.parse_args",
+            lambda: argparse.Namespace(resume=False, fresh=False, file=None, urls=[]),
+        )
         monkeypatch.setattr("yt_pipeline.cli.prepare_tasks", lambda args: [])
         mock_run = MagicMock()
         monkeypatch.setattr("asyncio.run", mock_run)
@@ -144,9 +141,10 @@ class TestMain:
 
     def test_main_with_tasks(self, monkeypatch):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
-        monkeypatch.setattr("yt_pipeline.cli.parse_args", lambda: argparse.Namespace(
-            resume=False, fresh=False, file=None, urls=[]
-        ))
+        monkeypatch.setattr(
+            "yt_pipeline.cli.parse_args",
+            lambda: argparse.Namespace(resume=False, fresh=False, file=None, urls=[]),
+        )
         monkeypatch.setattr(
             "yt_pipeline.cli.prepare_tasks",
             lambda args: [Task(url="https://a.com")],

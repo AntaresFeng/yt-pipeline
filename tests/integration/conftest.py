@@ -10,13 +10,13 @@ from yt_pipeline.pipeline import ShutdownManager
 
 # ---- Mock 数据常量 ----
 
-FFPROBE_1081 = (0, '{"streams":[{"width":1920,"height":1081}]}', '')
-FFPROBE_1080 = (0, '{"streams":[{"width":1920,"height":1080}]}', '')
-FFPROBE_ULTRAWIDE = (0, '{"streams":[{"width":3840,"height":1081}]}', '')
-FFPROBE_FAILURE = (1, '', 'ffprobe error: could not find stream info')
+FFPROBE_1081 = (0, '{"streams":[{"width":1920,"height":1081}]}', "")
+FFPROBE_1080 = (0, '{"streams":[{"width":1920,"height":1080}]}', "")
+FFPROBE_ULTRAWIDE = (0, '{"streams":[{"width":3840,"height":1081}]}', "")
+FFPROBE_FAILURE = (1, "", "ffprobe error: could not find stream info")
 
-FFPROBE_THUMBNAIL_TALL = (0, '{"streams":[{"width":320,"height":180}]}', '')
-FFPROBE_THUMBNAIL_OK = (0, '{"streams":[{"width":1280,"height":720}]}', '')
+FFPROBE_THUMBNAIL_TALL = (0, '{"streams":[{"width":320,"height":180}]}', "")
+FFPROBE_THUMBNAIL_OK = (0, '{"streams":[{"width":1280,"height":720}]}', "")
 
 
 def make_download_info(video_path: Path, video_id: str = "testvid") -> dict:
