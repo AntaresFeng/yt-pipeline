@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,27 @@ if TYPE_CHECKING:
     from yt_pipeline.pipeline import ShutdownManager
 
 logger = logging.getLogger("pipeline.download_worker")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+class WorkerLogger:
+    """yt-dlp logger 接口：静默正常输出，捕获错误信息。"""
+
+    def __init__(self, label: str = ""):
+        self.label = label
+        self.errors: list[str] = []
+
+    def debug(self, msg: str) -> None:
+        pass
+
+    def info(self, msg: str) -> None:
+        pass
+
+    def warning(self, msg: str) -> None:
+        pass
+
+    def error(self, msg: str) -> None:
+        self.errors.append(msg)
 
 
 def find_media_file(video_id: str, exts: set[str]) -> Path | None:
@@ -56,7 +78,9 @@ def _do_download(url: str) -> dict:
     """同步下载（在线程池中执行）。"""
     import yt_dlp
 
+    ydl_logger = WorkerLogger(label=url)
     ydl_opts = {
+        "logger": ydl_logger,
         "writethumbnail": True,
         "writesubtitles": True,
         "subtitlesformat": "srt",
@@ -71,7 +95,12 @@ def _do_download(url: str) -> dict:
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+        try:
+            info = ydl.extract_info(url, download=True)
+        except yt_dlp.utils.DownloadError as e:
+            # yt-dlp 下载错误包含ANSI转义码，清洗后重新抛出以便日志记录和错误处理。
+            raise RuntimeError(_ANSI_RE.sub("", str(e))) from e
+
         if info and info.get("_type") == "playlist":
             entries = info.get("entries") or []
             if not entries:

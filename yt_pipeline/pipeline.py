@@ -9,7 +9,6 @@ from pathlib import Path
 
 from yt_pipeline.config import DOWNLOAD_CONCURRENCY
 from yt_pipeline.model import Task, States
-from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.download_worker import download_worker
 from yt_pipeline.assessment_worker import assessment_worker
 from yt_pipeline.transcode_worker import transcode_worker
@@ -101,7 +100,7 @@ async def run_pipeline(
     await _join_or_shutdown(assessment_queue, assessment_task, shutdown)
     await _join_or_shutdown(transcode_queue, transcode_task, shutdown)
 
-    save_all_progress(tasks, state_file)
+    # save_all_progress(tasks, state_file)
 
     failed_count = sum(1 for t in tasks if t.state == States.FAILED)
     if all(t.state == States.DONE for t in tasks):

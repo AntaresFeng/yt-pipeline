@@ -1,8 +1,6 @@
 """cli 单元测试：参数解析、任务准备、主流程调度。"""
 
 import argparse
-from unittest.mock import MagicMock
-
 import pytest
 
 from yt_pipeline.cli import parse_args, prepare_tasks
@@ -131,13 +129,18 @@ class TestMain:
             lambda: argparse.Namespace(resume=False, fresh=False, file=None, urls=[]),
         )
         monkeypatch.setattr("yt_pipeline.cli.prepare_tasks", lambda args: [])
-        mock_run = MagicMock()
-        monkeypatch.setattr("asyncio.run", mock_run)
+        called = []
+
+        def _fake_run(coro):
+            called.append(coro)
+            coro.close()
+
+        monkeypatch.setattr("asyncio.run", _fake_run)
 
         from yt_pipeline.cli import main
 
         main()
-        mock_run.assert_not_called()
+        assert len(called) == 0
 
     def test_main_with_tasks(self, monkeypatch):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
@@ -149,10 +152,15 @@ class TestMain:
             "yt_pipeline.cli.prepare_tasks",
             lambda args: [Task(url="https://a.com")],
         )
-        mock_run = MagicMock()
-        monkeypatch.setattr("asyncio.run", mock_run)
+        called = []
+
+        def _fake_run(coro):
+            called.append(coro)
+            coro.close()
+
+        monkeypatch.setattr("asyncio.run", _fake_run)
 
         from yt_pipeline.cli import main
 
         main()
-        mock_run.assert_called_once()
+        assert len(called) == 1

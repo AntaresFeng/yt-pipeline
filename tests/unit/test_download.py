@@ -1,8 +1,12 @@
-"""download 模块单元测试：credits 生成 + 路径解析。"""
+"""download 模块单元测试：credits 生成 + 路径解析 + WorkerLogger。"""
 
 from pathlib import Path
 
-from yt_pipeline.download_worker import generate_credits, resolve_video_path
+from yt_pipeline.download_worker import (
+    WorkerLogger,
+    generate_credits,
+    resolve_video_path,
+)
 
 
 class TestGenerateCredits:
@@ -61,3 +65,23 @@ class TestResolveVideoPath:
     def test_not_found(self, tmp_path: Path, chdir):
         result = resolve_video_path({}, "nonexistent")
         assert result is None
+
+
+class TestWorkerLogger:
+    def test_debug_info_warning_silent(self):
+        lg = WorkerLogger(label="test")
+        lg.debug("d")
+        lg.info("i")
+        lg.warning("w")
+        assert lg.errors == []
+
+    def test_error_captured(self):
+        lg = WorkerLogger(label="test")
+        lg.error("something went wrong")
+        assert lg.errors == ["something went wrong"]
+
+    def test_multiple_errors(self):
+        lg = WorkerLogger()
+        lg.error("first")
+        lg.error("second")
+        assert lg.errors == ["first", "second"]
