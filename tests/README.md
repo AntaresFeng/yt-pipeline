@@ -78,7 +78,7 @@ Mock 最低外部边界（`_do_download`、`run_command`、`run_transcode`），
 | 纯函数 / 数据类 | 覆盖充分 |
 | async worker 协程 | 仅集成测试间接覆盖，无隔离单元测试 |
 | 外部边界（yt-dlp / ffmpeg / ffprobe） | 全部 mock，不依赖真实环境 |
-| 状态机流转 | 主路径覆盖，边界态（PROBING_COVER / PROCESSING_COVER）未单独测试 |
+| 状态机流转 | 主路径覆盖，ASSESSING 中间态已通过 shutdown 测试覆盖 |
 | 优雅退出 | 3 个阶段均有测试，`run_transcode` 内部 stdin `q` 指令未验证 |
 
 ### 建议补充方向
@@ -86,4 +86,4 @@ Mock 最低外部边界（`_do_download`、`run_command`、`run_transcode`），
 1. **`persistence.py` 单元测试**：原子写入、损坏 JSON 处理、空文件回退
 2. **`assessment_worker.probe` 单元测试**：ffprobe 输出解析、异常返回码
 3. **`transcode_worker.run_transcode` 单元测试**：stdin `q` 指令发送、进程组隔离、超时处理
-4. **状态机边界态测试**：PROBING_COVER / PROCESSING_COVER 的 shutdown 和 resume 行为
+4. **状态机边界态测试**：ASSESSING 的 shutdown 和 resume 行为
