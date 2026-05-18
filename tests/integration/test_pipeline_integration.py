@@ -82,7 +82,7 @@ class TestShutdown:
         self, pipeline_env, mock_download, mock_subprocess, mock_transcode,
         shutdown, gate, monkeypatch,
     ):
-        """assessment 阶段触发 shutdown：任务回退到 DOWNLOADED。"""
+        """assessment 阶段触发 shutdown：任务保留 ASSESSING 状态。"""
         call_count = 0
 
         async def _gated_run_command(cmd):
@@ -107,7 +107,7 @@ class TestShutdown:
             tg.create_task(_run_and_shutdown())
             tg.create_task(run_pipeline([task], shutdown, state_file))
 
-        assert task.state == States.DOWNLOADED
+        assert task.state == States.ASSESSING
 
     async def test_shutdown_during_transcode(
         self, pipeline_env, mock_download, mock_subprocess,
