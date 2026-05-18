@@ -200,7 +200,7 @@ async def assessment_worker(
             if video_path is None:
                 raise RuntimeError("video_path 未设置")
 
-            task.state = States.PROBING_COVER
+            task.state = States.ASSESSING
             if task.thumbnail_path:
                 thumb_spec, video_spec = await asyncio.gather(
                     probe(Path(task.thumbnail_path)),
@@ -211,14 +211,11 @@ async def assessment_worker(
                 video_spec = await probe(video_path)
 
             if thumb_spec is not None and thumb_spec.height < C.THUMBNAIL_MIN_HEIGHT:
-                task.state = States.PROCESSING_COVER
-                save_all_progress(tasks, state_file)
                 try:
                     await process_thumbnail(Path(task.thumbnail_path))
                 except Exception as e:
                     logger.warning("[%s] Cover processing skipped: %s", task.url, e)
 
-            task.state = States.PROBING_VIDEO
             strategy, reason = decide_video_strategy(video_spec)
 
             if strategy == C.STRATEGY_SKIP:
@@ -232,11 +229,7 @@ async def assessment_worker(
                 save_all_progress(tasks, state_file)
                 await transcode_queue.put(task)
         except asyncio.CancelledError:
-            logger.warning(
-                "[%s] Assessment cancelled, resetting to downloaded", task.url
-            )
-            task.state = States.DOWNLOADED
-            save_all_progress(tasks, state_file)
+            logger.warning("[%s] Assessment cancelled", task.url)
             raise
         except Exception as e:
             handle_worker_error(task, e, tasks, state_file)
