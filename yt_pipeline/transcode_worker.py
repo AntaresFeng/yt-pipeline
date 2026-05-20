@@ -19,6 +19,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger("pipeline.transcode_worker")
 
 
+async def _read_stderr(proc: asyncio.subprocess.Process) -> bytes:
+    """读取 ffmpeg stderr 直到 EOF。"""
+    chunks: list[bytes] = []
+    if proc.stderr is not None:
+        while True:
+            chunk = await proc.stderr.read(4096)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _format_ffmpeg_error(returncode: int, stderr: bytes) -> str:
+    """构建 ffmpeg 错误消息，附带截断的 stderr 片段。"""
+    msg = f"ffmpeg exited with code {returncode}"
+    if stderr:
+        msg += f": {stderr.decode(errors='replace')[:200]}"
+    return msg
+
+
 async def run_transcode(
     cmd: list[str],
     shutdown: ShutdownManager,
@@ -27,8 +47,11 @@ async def run_transcode(
 ) -> None:
     """执行 ffmpeg 转码。shutdown 触发时通过 stdin 发 'q' 优雅退出。
 
+    注意：不能使用 proc.communicate()，因为它会在 input=None 时立即关闭 stdin 管道，
+    导致后续无法发送 'q' 命令。
+
     Raises:
-        asyncio.CancelledError: shutdown 触发，转码中断
+        asyncio.CancelledError: shutdown 触发，转码中断（含 stderr 信息）
         RuntimeError: ffmpeg 异常退出 (returncode != 0)
     """
     prefix = f"[{label}] " if label else ""
@@ -46,10 +69,10 @@ async def run_transcode(
         **popen_kwargs,
     )
 
-    comm_task = asyncio.create_task(proc.communicate())
+    stderr_task = asyncio.create_task(_read_stderr(proc))
     shutdown_task = asyncio.create_task(shutdown.event.wait())
     done, pending = await asyncio.wait(
-        [comm_task, shutdown_task],
+        [stderr_task, shutdown_task],
         return_when=asyncio.FIRST_COMPLETED,
     )
 
@@ -66,25 +89,33 @@ async def run_transcode(
                     proc.stdin.close()
 
             try:
-                await asyncio.wait_for(comm_task, timeout=10.0)
+                await asyncio.wait_for(proc.wait(), timeout=30.0)
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
 
             if proc.returncode == 0:
                 logger.info("%sffmpeg exited gracefully (sent 'q')", prefix)
-            else:
-                logger.warning(
-                    "%sffmpeg exited with code %d after 'q'", prefix, proc.returncode
-                )
-            raise asyncio.CancelledError("Shutdown during transcode")
+                raise asyncio.CancelledError("Shutdown during transcode")
 
-        _, stderr = comm_task.result()
+            try:
+                await asyncio.wait_for(asyncio.shield(stderr_task), timeout=5.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
+
+            stderr = b""
+            if stderr_task.done() and not stderr_task.cancelled():
+                stderr = stderr_task.result()
+
+            msg = _format_ffmpeg_error(proc.returncode, stderr)
+            logger.warning("%s%s", prefix, msg)
+            raise RuntimeError(msg)
+
+        # 等待 ffmpeg 结束，可能是转码完成或 ffmpeg 自身错误退出，或者 shutdown 触发后 ffmpeg 收到 'q' 后退出
+        await proc.wait()
+        stderr = await stderr_task
         if proc.returncode != 0:
-            stderr_text = stderr.decode(errors="replace") if stderr else ""
-            msg = f"ffmpeg exited with code {proc.returncode}"
-            if stderr_text:
-                msg += f": {stderr_text[:200]}"
+            msg = _format_ffmpeg_error(proc.returncode, stderr)
             logger.warning("%s%s", prefix, msg)
             raise RuntimeError(msg)
         logger.info("%sffmpeg finished", prefix)
