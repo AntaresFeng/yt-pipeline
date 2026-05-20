@@ -35,3 +35,7 @@ FFMPEG_AUDIO_BITRATE = "192k"
 MAX_TITLE_LENGTH = 180
 VIDEO_EXTS: set[str] = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 IMAGE_EXTS: set[str] = {".png", ".jpg", ".jpeg", ".webp"}
+
+# ---- 外部工具路径 ----
+FFMPEG_PATH: str | None = None
+FFPROBE_PATH: str | None = None

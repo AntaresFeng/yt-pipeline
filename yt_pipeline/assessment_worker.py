@@ -38,7 +38,7 @@ async def probe(file_path: Path) -> StreamSpec:
     """ffprobe 获取媒体流尺寸。"""
     # fmt: off
     rc, stdout, stderr = await run_command([
-        "ffprobe", "-hide_banner",
+        C.FFPROBE_PATH, "-hide_banner",
         "-v", "error",
         "-select_streams", "v:0",
         "-show_entries", "stream=width,height",
@@ -60,7 +60,7 @@ async def probe(file_path: Path) -> StreamSpec:
     else:
         # fmt: off
         rc2, stdout2, stderr2 = await run_command([
-            "ffprobe", "-hide_banner",
+            C.FFPROBE_PATH, "-hide_banner",
             "-v", "error",
             "-show_entries", "format=width,height",
             "-of", "json",
@@ -104,7 +104,7 @@ async def process_thumbnail(thumbnail_path: Path) -> None:
 
     # fmt: off
     rc, _, stderr = await run_command([
-        "ffmpeg", "-hide_banner", "-y",
+        C.FFMPEG_PATH, "-hide_banner", "-y",
         "-i", str(thumbnail_path),
         "-vf", f"crop={crop_w}:{crop_h},scale=iw*2:ih*2:flags=lanczos",
         "-frames:v", "1", "-update", "1",
@@ -158,7 +158,7 @@ def build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Pa
 
     # fmt: off
     command = [
-        "ffmpeg", "-hide_banner", "-y",
+        C.FFMPEG_PATH, "-hide_banner", "-y",
         "-i", str(video_path),
         "-vf", vf,
         "-map", "0:v:0", "-map", "0:a?",

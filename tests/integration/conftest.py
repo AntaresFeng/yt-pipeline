@@ -80,12 +80,13 @@ def mock_subprocess(monkeypatch):
     }
 
     async def _run_command(cmd: list[str]) -> tuple[int, str, str]:
-        if cmd[0] == "ffprobe":
+        cmd_name = Path(cmd[0]).name
+        if cmd_name == "ffprobe":
             target = cmd[-1]
             if any(target.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp")):
                 return _responses["ffprobe_cover"]
             return _responses["ffprobe"]
-        elif cmd[0] == "ffmpeg":
+        elif cmd_name == "ffmpeg":
             return _responses["ffmpeg"]
         return (1, "", f"unknown command: {cmd[0]}")
 
@@ -125,6 +126,11 @@ def mock_transcode(monkeypatch):
 def pipeline_env(tmp_path: Path, monkeypatch):
     """组合 fixture：tmp_path + chdir + ShutdownManager + state_file 路径。"""
     import os
+
+    import yt_pipeline.config as config
+
+    monkeypatch.setattr(config, "FFMPEG_PATH", "ffmpeg")
+    monkeypatch.setattr(config, "FFPROBE_PATH", "ffprobe")
 
     orig = os.getcwd()
     os.chdir(tmp_path)

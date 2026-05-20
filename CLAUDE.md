@@ -18,6 +18,7 @@
 | `config.py` | 配置参数和业务常量 |
 | `persistence.py` | progress.json 读写（原子写入 .tmp → replace） |
 | `utils.py` | handle_worker_error |
+| `deps.py` | 外部依赖检测（yt-dlp / ffmpeg / ffprobe） |
 | `cli.py` | CLI 入口 |
 | `url_collector.py` | URL 收集 |
 

@@ -124,6 +124,7 @@ class TestPrepareTasks:
 class TestMain:
     def test_main_no_tasks(self, monkeypatch):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+        monkeypatch.setattr("yt_pipeline.deps.check_dependencies", lambda: None)
         monkeypatch.setattr(
             "yt_pipeline.cli.parse_args",
             lambda: argparse.Namespace(resume=False, fresh=False, file=None, urls=[]),
@@ -144,6 +145,7 @@ class TestMain:
 
     def test_main_with_tasks(self, monkeypatch):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+        monkeypatch.setattr("yt_pipeline.deps.check_dependencies", lambda: None)
         monkeypatch.setattr(
             "yt_pipeline.cli.parse_args",
             lambda: argparse.Namespace(resume=False, fresh=False, file=None, urls=[]),
@@ -164,3 +166,25 @@ class TestMain:
 
         main()
         assert len(called) == 1
+
+    def test_main_dependency_missing(self, monkeypatch):
+        import argparse
+
+        from yt_pipeline.deps import DependencyError
+
+        monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+
+        def _fail():
+            raise DependencyError("ffmpeg", "未找到 ffmpeg")
+
+        monkeypatch.setattr("yt_pipeline.cli.check_dependencies", _fail)
+        monkeypatch.setattr(
+            "yt_pipeline.cli.parse_args",
+            lambda: argparse.Namespace(resume=False, fresh=False, file=None, urls=[]),
+        )
+
+        from yt_pipeline.cli import main
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        assert exc_info.value.code == 1

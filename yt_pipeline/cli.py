@@ -8,6 +8,7 @@ import logging
 import sys
 
 from yt_pipeline.config import STATE_FILE
+from yt_pipeline.deps import DependencyError, check_dependencies
 from yt_pipeline.pipeline import ShutdownManager, run_pipeline
 from yt_pipeline.model import Task, States, RESUME_RESET
 from yt_pipeline.persistence import load_progress
@@ -113,6 +114,11 @@ async def _run_pipeline(tasks: list[Task]) -> None:
 
 def main() -> None:
     _setup_logging()
+    try:
+        check_dependencies()
+    except DependencyError as e:
+        logger.error("依赖检查失败: %s", e)
+        sys.exit(1)
     args = parse_args()
     try:
         tasks = prepare_tasks(args)
