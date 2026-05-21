@@ -131,6 +131,8 @@ def pipeline_env(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(config, "FFMPEG_PATH", "ffmpeg")
     monkeypatch.setattr(config, "FFPROBE_PATH", "ffprobe")
+    monkeypatch.setattr(config, "TRANSCODE_BACKEND", "nvencc", raising=False)
+    monkeypatch.setattr(config, "NVENCC_PATH", "NVEncC64.exe", raising=False)
 
     orig = os.getcwd()
     os.chdir(tmp_path)

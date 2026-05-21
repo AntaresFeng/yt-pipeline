@@ -21,7 +21,7 @@ class Task:
     video_id: str | None = None
     video_path: str | None = None
     thumbnail_path: str | None = None
-    ffmpeg_command: list[str] | None = None
+    transcode_command: list[str] | None = None
 
 
 # 中断恢复时的状态重置映射

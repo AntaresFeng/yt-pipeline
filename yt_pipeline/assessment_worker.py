@@ -138,23 +138,24 @@ def decide_video_strategy(spec: StreamSpec) -> tuple[str, str | None]:
     return C.STRATEGY_PAD_1600, None
 
 
-def build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Path]:
-    """根据策略构建 ffmpeg 命令和输出路径。
-
-    Returns:
-        (command, output_path)
-    """
+def _processed_output(video_path: Path, strategy: str) -> Path:
     if strategy == C.STRATEGY_UPSCALE_4K:
-        output = video_path.with_name(f"{video_path.stem}_processed_4k.mp4")
+        return video_path.with_name(f"{video_path.stem}_processed_4k.mp4")
+    if strategy == C.STRATEGY_PAD_1600:
+        return video_path.with_name(f"{video_path.stem}_processed_pad1600.mp4")
+    raise ValueError(f"未知策略: {strategy}")
+
+
+def _build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Path]:
+    """根据策略构建 ffmpeg 命令和输出路径。"""
+    output = _processed_output(video_path, strategy)
+    if strategy == C.STRATEGY_UPSCALE_4K:
         vf = f"scale={C.TARGET_4K_WIDTH}:{C.TARGET_4K_HEIGHT}:flags=lanczos"
-    elif strategy == C.STRATEGY_PAD_1600:
-        output = video_path.with_name(f"{video_path.stem}_processed_pad1600.mp4")
+    else:
         vf = (
             f"scale=trunc(iw/2)*2:trunc(ih/2)*2,"
             f"pad=iw:{C.TARGET_PAD_HEIGHT}:0:({C.TARGET_PAD_HEIGHT}-ih)/2:black"
         )
-    else:
-        raise ValueError(f"未知策略: {strategy}")
 
     # fmt: off
     command = [
@@ -172,6 +173,70 @@ def build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Pa
     # fmt: on
 
     return command, output
+
+
+def _even_floor(value: int) -> int:
+    return value // 2 * 2
+
+
+def _build_nvencc_command(
+    video_path: Path,
+    strategy: str,
+    spec: StreamSpec,
+) -> tuple[list[str], Path]:
+    """根据策略构建 NVEncC 命令和输出路径。"""
+    output = _processed_output(video_path, strategy)
+
+    if strategy == C.STRATEGY_UPSCALE_4K:
+        output_res = f"{C.TARGET_4K_WIDTH}x{C.TARGET_4K_HEIGHT}"
+        pad_args: list[str] = []
+    else:
+        resize_w = _even_floor(spec.width)
+        resize_h = _even_floor(spec.height)
+        pad_total = C.TARGET_PAD_HEIGHT - resize_h
+        if resize_w <= 0 or resize_h <= 0 or pad_total < 0:
+            raise ValueError(
+                f"无法为尺寸 {spec.width}x{spec.height} 构建 pad_1600 命令"
+            )
+        pad_top = pad_total // 2
+        pad_bottom = pad_total - pad_top
+        output_res = f"{resize_w}x{C.TARGET_PAD_HEIGHT}"
+        pad_args = ["--vpp-pad", f"0,{pad_top},0,{pad_bottom}"]
+
+    # fmt: off
+    command = [
+        C.NVENCC_PATH, "--avsw",
+        "-i", str(video_path),
+        "--codec", C.NVENCC_CODEC,
+        "--qvbr", str(C.NVENCC_QVBR),
+        "-u", C.NVENCC_PRESET,
+        "--output-res", output_res,
+        "--vpp-resize", C.NVENCC_RESIZE_ALGO,
+        *pad_args,
+        "--colorrange", "auto", "--colormatrix", "auto",
+        "--colorprim", "auto", "--transfer", "auto", "--chromaloc", "auto",
+        "--audio-codec", C.NVENCC_AUDIO_CODEC,
+        "--audio-bitrate", str(C.NVENCC_AUDIO_BITRATE),
+        "-f", "mp4",
+        "-o", str(output),
+    ]
+    # fmt: on
+
+    return command, output
+
+
+def build_transcode_command(
+    video_path: Path,
+    strategy: str,
+    spec: StreamSpec,
+) -> tuple[list[str], Path]:
+    """根据配置的转码后端构建命令和输出路径。"""
+    backend = C.TRANSCODE_BACKEND.lower()
+    if backend == C.BACKEND_FFMPEG:
+        return _build_ffmpeg_command(video_path, strategy)
+    if backend == C.BACKEND_NVENCC:
+        return _build_nvencc_command(video_path, strategy, spec)
+    raise ValueError(f"未知转码后端: {C.TRANSCODE_BACKEND}")
 
 
 async def assessment_worker(
@@ -223,8 +288,8 @@ async def assessment_worker(
                 save_all_progress(tasks, state_file)
                 logger.info("[%s] Skipped: %s", task.url, reason)
             else:
-                cmd, _ = build_ffmpeg_command(video_path, strategy)
-                task.ffmpeg_command = cmd
+                cmd, _ = build_transcode_command(video_path, strategy, video_spec)
+                task.transcode_command = cmd
                 task.state = States.PROCESSING_VIDEO
                 save_all_progress(tasks, state_file)
                 await transcode_queue.put(task)

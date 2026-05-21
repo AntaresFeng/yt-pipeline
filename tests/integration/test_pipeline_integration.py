@@ -11,7 +11,7 @@ class TestFullPipeline:
     async def test_full_pipeline_upscale(
         self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
     ):
-        """1920x1081 -> upscale_4k 策略：全链路 pending->done，ffmpeg_command 含 scale=3840:2160。"""
+        """1920x1081 -> upscale_4k：全链路 pending->done，转码命令走 NVEncC。"""
         mock_subprocess(ffprobe=(0, '{"streams":[{"width":1920,"height":1081}]}', ""))
         task = Task(url="https://youtube.com/watch?v=testvid")
 
@@ -19,13 +19,14 @@ class TestFullPipeline:
         await run_pipeline([task], shutdown, state_file)
 
         assert task.state == States.DONE
-        assert any("scale=3840:2160" in " ".join(cmd) for cmd in mock_transcode)
+        assert any(cmd[0] == "NVEncC64.exe" for cmd in mock_transcode)
+        assert any("--output-res 3840x2160" in " ".join(cmd) for cmd in mock_transcode)
         assert len(mock_transcode) == 1
 
     async def test_full_pipeline_pad(
         self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
     ):
-        """3840x1081 -> pad_1600 策略：全链路 pending->done，ffmpeg_command 含 pad=iw:1600。"""
+        """3840x1081 -> pad_1600：全链路 pending->done，NVEncC 命令含具体 pad 值。"""
         mock_subprocess(ffprobe=(0, '{"streams":[{"width":3840,"height":1081}]}', ""))
         task = Task(url="https://youtube.com/watch?v=testvid")
 
@@ -33,7 +34,8 @@ class TestFullPipeline:
         await run_pipeline([task], shutdown, state_file)
 
         assert task.state == States.DONE
-        assert any("pad=iw:1600" in " ".join(cmd) for cmd in mock_transcode)
+        assert any("--output-res 3840x1600" in " ".join(cmd) for cmd in mock_transcode)
+        assert any("--vpp-pad 0,260,0,260" in " ".join(cmd) for cmd in mock_transcode)
         assert len(mock_transcode) == 1
 
 
@@ -208,10 +210,10 @@ class TestFailure:
         shutdown,
         monkeypatch,
     ):
-        """ffmpeg 异常退出：任务标记为 FAILED，error 包含 ffmpeg。"""
+        """transcode 异常退出：任务标记为 FAILED，error 包含 transcode。"""
 
         async def _failing_transcode(cmd, shutdown_mgr, *, label=""):
-            raise RuntimeError("ffmpeg exited with code 1")
+            raise RuntimeError("transcode exited with code 1")
 
         monkeypatch.setattr(
             "yt_pipeline.transcode_worker.run_transcode", _failing_transcode
@@ -222,7 +224,7 @@ class TestFailure:
         await run_pipeline([task], shutdown, state_file)
 
         assert task.state == States.FAILED
-        assert "ffmpeg" in task.errors[-1]
+        assert "transcode" in task.errors[-1]
         # FAILED 任务保留 progress.json 以便重试
         assert state_file.exists()
 
@@ -282,7 +284,7 @@ class TestResumeTerminalStates:
         """混合 DONE+FAILED 场景：progress.json 保留（因为有 FAILED 任务）。"""
 
         async def _failing_transcode(cmd, shutdown_mgr, *, label=""):
-            raise RuntimeError("ffmpeg exited with code 1")
+            raise RuntimeError("transcode exited with code 1")
 
         monkeypatch.setattr(
             "yt_pipeline.transcode_worker.run_transcode", _failing_transcode

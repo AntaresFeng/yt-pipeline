@@ -53,6 +53,9 @@ progress.json
 *.jpg
 *.jpeg
 *.webp
+*.srt
+*.vtt
+*.ass
 *.credits.txt
 *.info.json
 *.description

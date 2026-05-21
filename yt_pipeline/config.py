@@ -4,10 +4,20 @@ import os
 from pathlib import Path
 
 # ---- 运行时配置（可通过环境变量覆盖）----
-DOWNLOAD_CONCURRENCY: int = int(os.environ.get("PIPELINE_DOWNLOAD_CONCURRENCY", "4"))
+DOWNLOAD_CONCURRENCY: int = int(os.environ.get("PIPELINE_DOWNLOAD_CONCURRENCY", "2"))
 STATE_FILE: Path = Path(os.environ.get("PIPELINE_STATE_FILE", "progress.json"))
 
-# ---- 处理策略 ----
+# ---- 外部工具路径 ----
+FFMPEG_PATH: str | None = None  # 可手动指定 FFmpeg 路径，留空则 which 查找
+FFPROBE_PATH: str | None = None
+NVENCC_PATH: str | None = r"E:\Software\NegativeEncoder\Libs\NVEncC64.exe"  # 不许删！!
+SKIP_CHECK_DEPENDENCIES: bool = True
+
+# ---- 转码后端 ----
+BACKEND_FFMPEG: str = "ffmpeg"
+BACKEND_NVENCC: str = "nvencc"
+TRANSCODE_BACKEND: str = os.environ.get("PIPELINE_TRANSCODE_BACKEND", BACKEND_NVENCC)
+
 STRATEGY_SKIP = "skip"
 STRATEGY_UPSCALE_4K = "upscale_4k"
 STRATEGY_PAD_1600 = "pad_1600"
@@ -27,15 +37,18 @@ TARGET_ASPECT_RATIO = 16 / 9
 THUMBNAIL_MIN_HEIGHT = 720
 
 # ---- 编码参数 ----
-FFMPEG_CRF = 18
-FFMPEG_PRESET = "slow"
-FFMPEG_AUDIO_BITRATE = "192k"
+FFMPEG_CRF: int = 18
+FFMPEG_PRESET: str = "slow"
+FFMPEG_AUDIO_BITRATE: str = "192k"  # ffmpeg 的 -b:a 参数使用带单位的字符串，例如 "192k"
+
+NVENCC_CODEC: str = "hevc"
+NVENCC_QVBR: int = 23
+NVENCC_PRESET: str = "quality"
+NVENCC_RESIZE_ALGO: str = "spline36"
+NVENCC_AUDIO_CODEC: str = "aac"
+NVENCC_AUDIO_BITRATE: int = 192  # NVEncC 的 --audio-bitrate 单位是 kbps，传整数不带 "k"
 
 # ---- 下载 ----
 MAX_TITLE_LENGTH = 180
 VIDEO_EXTS: set[str] = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 IMAGE_EXTS: set[str] = {".png", ".jpg", ".jpeg", ".webp"}
-
-# ---- 外部工具路径 ----
-FFMPEG_PATH: str | None = None
-FFPROBE_PATH: str | None = None

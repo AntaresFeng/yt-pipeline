@@ -1,11 +1,12 @@
-"""策略引擎测试：decide_video_strategy + build_ffmpeg_command。"""
+"""策略引擎测试：decide_video_strategy + build_transcode_command。"""
 
 from pathlib import Path
 
 import pytest
 
+import yt_pipeline.config as C
 from yt_pipeline.model import StreamSpec
-from yt_pipeline.assessment_worker import decide_video_strategy, build_ffmpeg_command
+from yt_pipeline.assessment_worker import decide_video_strategy, build_transcode_command
 
 
 STRATEGY_PARAMS = [
@@ -17,10 +18,9 @@ STRATEGY_PARAMS = [
     # 短边 ≥ 1600 → skip（边界值）
     (2560, 1600, "skip", "1600"),
     # 1081–1599, ratio < 2.0 → upscale_4k
-    (1920, 1081, "upscale_4k", None),
-    (1920, 1599, "upscale_4k", None),
+    (2560, 1440, "upscale_4k", None),  # 2k 16:9 视频
     # 1081–1599, ratio ≥ 2.0 → pad_1600
-    (3840, 1081, "pad_1600", None),
+    (3440, 1440, "pad_1600", None),  # 超宽
 ]
 
 
@@ -32,7 +32,6 @@ STRATEGY_PARAMS = [
         "短边=1080_skip",
         "短边=1600_skip",
         "短边=1081_ratio<2_upscale_4k",
-        "短边=1599_ratio<2_upscale_4k",
         "短边=1081_ratio>=2_pad_1600",
     ],
 )
@@ -46,32 +45,121 @@ def test_decide_strategy(width, height, expected_strategy, expected_reason):
         assert expected_reason in reason
 
 
-class TestBuildFfmpegCommand:
-    def test_upscale_4k(self, tmp_path: Path):
+def _arg_after(cmd: list[str], name: str) -> str:
+    return cmd[cmd.index(name) + 1]
+
+
+class TestBuildTranscodeCommand:
+    @pytest.fixture(autouse=True)
+    def default_nvencc_config(self, monkeypatch):
+        monkeypatch.setattr(C, "TRANSCODE_BACKEND", "nvencc", raising=False)
+        monkeypatch.setattr(C, "FFMPEG_PATH", "ffmpeg", raising=False)
+        monkeypatch.setattr(C, "NVENCC_PATH", "NVEncC64.exe", raising=False)
+        monkeypatch.setattr(C, "NVENCC_CODEC", "hevc", raising=False)
+        monkeypatch.setattr(C, "NVENCC_QVBR", 23, raising=False)
+        monkeypatch.setattr(C, "NVENCC_PRESET", "quality", raising=False)
+        monkeypatch.setattr(C, "NVENCC_RESIZE_ALGO", "spline36", raising=False)
+        monkeypatch.setattr(C, "NVENCC_AUDIO_CODEC", "aac", raising=False)
+        monkeypatch.setattr(C, "NVENCC_AUDIO_BITRATE", 192, raising=False)
+
+    def test_nvencc_upscale_4k(self, tmp_path: Path):
         video = tmp_path / "test.mp4"
         video.touch()
-        cmd, output = build_ffmpeg_command(video, "upscale_4k")
-        assert "scale=3840:2160:flags=lanczos" in " ".join(cmd)
+        cmd, output = build_transcode_command(
+            video,
+            "upscale_4k",
+            StreamSpec(width=1920, height=1081),
+        )
+
+        assert cmd[0] == "NVEncC64.exe"
+        assert "--avsw" in cmd
+        assert "--avhw" not in cmd
+        assert _arg_after(cmd, "--output-res") == "3840x2160"
+        assert _arg_after(cmd, "--vpp-resize") == "spline36"
+        assert "--vpp-pad" not in cmd
+        assert _arg_after(cmd, "--codec") == "hevc"
+        assert "--cqp" not in cmd
+        assert _arg_after(cmd, "--qvbr") == "23"
+        assert _arg_after(cmd, "-u") == "quality"
+        assert _arg_after(cmd, "--audio-codec") == "aac"
+        assert _arg_after(cmd, "--audio-bitrate") == "192"
+        assert _arg_after(cmd, "-f") == "mp4"
+        assert _arg_after(cmd, "-o") == str(output)
         assert output.name.endswith("_processed_4k.mp4")
         assert output != video
 
-    def test_pad_1600(self, tmp_path: Path):
+    def test_nvencc_pad_1600(self, tmp_path: Path):
         video = tmp_path / "test.mkv"
         video.touch()
-        cmd, output = build_ffmpeg_command(video, "pad_1600")
-        assert "pad=iw:1600:0:" in " ".join(cmd)
+        cmd, output = build_transcode_command(
+            video,
+            "pad_1600",
+            StreamSpec(width=3840, height=1081),
+        )
+
+        assert _arg_after(cmd, "--output-res") == "3840x1600"
+        assert _arg_after(cmd, "--vpp-pad") == "0,260,0,260"
+        assert _arg_after(cmd, "--vpp-resize") == "spline36"
         assert output.name.endswith("_processed_pad1600.mp4")
         assert output != video
+
+    def test_ffmpeg_backend_keeps_existing_upscale_command(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(C, "TRANSCODE_BACKEND", "ffmpeg")
+        video = tmp_path / "test.mp4"
+        video.touch()
+        cmd, output = build_transcode_command(
+            video,
+            "upscale_4k",
+            StreamSpec(width=1920, height=1081),
+        )
+
+        assert cmd[0] == C.FFMPEG_PATH
+        assert "scale=3840:2160:flags=lanczos" in " ".join(cmd)
+        assert output.name.endswith("_processed_4k.mp4")
+
+    def test_ffmpeg_backend_keeps_existing_pad_command(
+        self, tmp_path: Path, monkeypatch
+    ):
+        monkeypatch.setattr(C, "TRANSCODE_BACKEND", "ffmpeg")
+        video = tmp_path / "test.mkv"
+        video.touch()
+        cmd, output = build_transcode_command(
+            video,
+            "pad_1600",
+            StreamSpec(width=3840, height=1081),
+        )
+
+        assert cmd[0] == C.FFMPEG_PATH
+        assert "pad=iw:1600:0:" in " ".join(cmd)
+        assert output.name.endswith("_processed_pad1600.mp4")
 
     def test_unknown_strategy_raises(self, tmp_path: Path):
         video = tmp_path / "test.mp4"
         video.touch()
         with pytest.raises(ValueError, match="未知策略"):
-            build_ffmpeg_command(video, "unknown")
+            build_transcode_command(
+                video, "unknown", StreamSpec(width=1920, height=1081)
+            )
+
+    def test_unknown_backend_raises(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr(C, "TRANSCODE_BACKEND", "bad-backend")
+        video = tmp_path / "test.mp4"
+        video.touch()
+        with pytest.raises(ValueError, match="未知转码后端"):
+            build_transcode_command(
+                video,
+                "upscale_4k",
+                StreamSpec(width=1920, height=1081),
+            )
 
     def test_output_path_idempotent(self, tmp_path: Path):
         video = tmp_path / "test.mp4"
         video.touch()
-        _, out1 = build_ffmpeg_command(video, "upscale_4k")
-        _, out2 = build_ffmpeg_command(video, "upscale_4k")
+        spec = StreamSpec(width=1920, height=1081)
+        _, out1 = build_transcode_command(video, "upscale_4k", spec)
+        _, out2 = build_transcode_command(video, "upscale_4k", spec)
         assert out2 == out1

@@ -1,4 +1,4 @@
-"""转码 worker：串行 ffmpeg 转码 + 薄封装入口。"""
+"""转码 worker：串行执行转码命令 + 薄封装入口。"""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ logger = logging.getLogger("pipeline.transcode_worker")
 
 
 async def _read_stderr(proc: asyncio.subprocess.Process) -> bytes:
-    """读取 ffmpeg stderr 直到 EOF。"""
+    """读取转码进程 stderr 直到 EOF。"""
     chunks: list[bytes] = []
     if proc.stderr is not None:
         while True:
@@ -31,9 +31,9 @@ async def _read_stderr(proc: asyncio.subprocess.Process) -> bytes:
     return b"".join(chunks)
 
 
-def _format_ffmpeg_error(returncode: int, stderr: bytes) -> str:
-    """构建 ffmpeg 错误消息，附带截断的 stderr 片段。"""
-    msg = f"ffmpeg exited with code {returncode}"
+def _format_transcode_error(tool_name: str, returncode: int, stderr: bytes) -> str:
+    """构建转码错误消息，附带截断的 stderr 片段。"""
+    msg = f"{tool_name} exited with code {returncode}"
     if stderr:
         msg += f": {stderr.decode(errors='replace')[:200]}"
     return msg
@@ -45,17 +45,18 @@ async def run_transcode(
     *,
     label: str = "",
 ) -> None:
-    """执行 ffmpeg 转码。shutdown 触发时通过 stdin 发 'q' 优雅退出。
+    """执行转码命令。shutdown 触发时通过 stdin 发 'q' 优雅退出。
 
     注意：不能使用 proc.communicate()，因为它会在 input=None 时立即关闭 stdin 管道，
     导致后续无法发送 'q' 命令。
 
     Raises:
         asyncio.CancelledError: shutdown 触发，转码中断（含 stderr 信息）
-        RuntimeError: ffmpeg 异常退出 (returncode != 0)
+        RuntimeError: 转码进程异常退出 (returncode != 0)
     """
     prefix = f"[{label}] " if label else ""
-    logger.info("%sStarting ffmpeg...", prefix)
+    tool_name = Path(cmd[0]).name if cmd else "transcode"
+    logger.info("%sStarting %s...", prefix, tool_name)
 
     popen_kwargs: dict = {}
     if sys.platform == "win32":
@@ -78,7 +79,7 @@ async def run_transcode(
 
     try:
         if shutdown_task in done:
-            logger.info("%sSending 'q' to ffmpeg for graceful exit...", prefix)
+            logger.info("%sSending 'q' to %s for graceful exit...", prefix, tool_name)
             if proc.stdin and not proc.stdin.is_closing():
                 try:
                     proc.stdin.write(b"q\n")
@@ -95,7 +96,7 @@ async def run_transcode(
                 await proc.wait()
 
             if proc.returncode == 0:
-                logger.info("%sffmpeg exited gracefully (sent 'q')", prefix)
+                logger.info("%s%s exited gracefully (sent 'q')", prefix, tool_name)
                 raise asyncio.CancelledError("Shutdown during transcode")
 
             try:
@@ -107,18 +108,18 @@ async def run_transcode(
             if stderr_task.done() and not stderr_task.cancelled():
                 stderr = stderr_task.result()
 
-            msg = _format_ffmpeg_error(proc.returncode, stderr)
+            msg = _format_transcode_error(tool_name, proc.returncode, stderr)
             logger.warning("%s%s", prefix, msg)
             raise RuntimeError(msg)
 
-        # 等待 ffmpeg 结束，可能是转码完成或 ffmpeg 自身错误退出，或者 shutdown 触发后 ffmpeg 收到 'q' 后退出
+        # 等待进程结束，可能是转码完成、自身错误退出，或者收到 'q' 后退出
         await proc.wait()
         stderr = await stderr_task
         if proc.returncode != 0:
-            msg = _format_ffmpeg_error(proc.returncode, stderr)
+            msg = _format_transcode_error(tool_name, proc.returncode, stderr)
             logger.warning("%s%s", prefix, msg)
             raise RuntimeError(msg)
-        logger.info("%sffmpeg finished", prefix)
+        logger.info("%s%s finished", prefix, tool_name)
     finally:
         for p in pending:
             p.cancel()
@@ -148,9 +149,9 @@ async def transcode_worker(
             continue
 
         try:
-            if task.ffmpeg_command is None:
-                raise ValueError("task.ffmpeg_command 未设置")
-            await run_transcode(task.ffmpeg_command, shutdown, label=task.url)
+            if task.transcode_command is None:
+                raise ValueError("task.transcode_command 未设置")
+            await run_transcode(task.transcode_command, shutdown, label=task.url)
             task.state = States.DONE
             save_all_progress(tasks, state_file)
             logger.info("[%s] Transcode completed", task.url)

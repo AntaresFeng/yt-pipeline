@@ -177,6 +177,7 @@ class TestMain:
         def _fail():
             raise DependencyError("ffmpeg", "未找到 ffmpeg")
 
+        monkeypatch.setattr("yt_pipeline.cli.SKIP_CHECK_DEPENDENCIES", False)
         monkeypatch.setattr("yt_pipeline.cli.check_dependencies", _fail)
         monkeypatch.setattr(
             "yt_pipeline.cli.parse_args",

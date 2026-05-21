@@ -1,10 +1,11 @@
-"""外部依赖检测：yt-dlp / ffmpeg / ffprobe。"""
+"""外部依赖检测：yt-dlp / ffmpeg / ffprobe / NVEncC。"""
 
 from __future__ import annotations
 
 import logging
 import shutil
 import subprocess
+from collections.abc import Sequence
 
 import yt_pipeline.config as config
 
@@ -19,22 +20,32 @@ class DependencyError(Exception):
         super().__init__(message)
 
 
-def _resolve_tool_path(name: str, env_path: str | None) -> str:
+NVENCC_CANDIDATES = ("NVEncC64.exe", "NVEncC64", "nvencc64", "NVEncC")
+
+
+def _resolve_tool_path(
+    name: str,
+    env_path: str | None,
+    *,
+    candidates: Sequence[str] | None = None,
+) -> str:
     """解析工具路径：优先使用用户指定路径，否则从 PATH 查找。"""
     if env_path:
         return env_path
-    found = shutil.which(name)
-    if found is None:
-        hint = f"请安装后确保在 PATH 中，或设置环境变量 PIPELINE_{name.upper()}_PATH"
-        raise DependencyError(name, f"未找到 {name}，{hint}")
-    return found
+    for candidate in candidates or (name,):
+        found = shutil.which(candidate)
+        if found is not None:
+            return found
+
+    hint = f"请安装后确保在 PATH 中，或设置环境变量 PIPELINE_{name.upper()}_PATH"
+    raise DependencyError(name, f"未找到 {name}，{hint}")
 
 
-def _verify_executable(path: str, name: str) -> None:
+def _verify_executable(path: str, name: str, *, version_arg: str = "-version") -> None:
     """验证工具可执行性。"""
     try:
         result = subprocess.run(
-            [path, "-version"],
+            [path, version_arg],
             capture_output=True,
             timeout=10,
         )
@@ -68,3 +79,20 @@ def check_dependencies() -> None:
     config.FFPROBE_PATH = _resolve_tool_path("ffprobe", config.FFPROBE_PATH)
     _verify_executable(config.FFPROBE_PATH, "ffprobe")
     logger.debug("OK: ffprobe (%s)", config.FFPROBE_PATH)
+
+    backend = config.TRANSCODE_BACKEND.lower()
+    if backend == config.BACKEND_FFMPEG:
+        return
+    if backend != config.BACKEND_NVENCC:
+        raise DependencyError(
+            "transcode_backend",
+            f"未知转码后端: {config.TRANSCODE_BACKEND}",
+        )
+
+    config.NVENCC_PATH = _resolve_tool_path(
+        "nvencc",
+        config.NVENCC_PATH,
+        candidates=NVENCC_CANDIDATES,
+    )
+    _verify_executable(config.NVENCC_PATH, "nvencc", version_arg="--version")
+    logger.debug("OK: nvencc (%s)", config.NVENCC_PATH)

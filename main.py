@@ -22,4 +22,7 @@ def flush_input():
 if __name__ == "__main__":
     main()
     flush_input()
-    input("Press Enter to exit...")
+    try:
+        input("Press Enter to exit...")
+    except (EOFError, KeyboardInterrupt):
+        pass
