@@ -13,6 +13,12 @@ class States:
     FAILED = "failed"
 
 
+class Strategies:
+    SKIP = "skip"
+    UPSCALE_4K = "upscale_4k"
+    PAD_1600 = "pad_1600"
+
+
 @dataclass
 class Task:
     url: str

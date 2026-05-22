@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yt_pipeline.config as C
-from yt_pipeline.model import Task, States, StreamSpec
+from yt_pipeline.model import Task, States, Strategies, StreamSpec
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
 
@@ -125,23 +125,23 @@ def decide_video_strategy(spec: StreamSpec) -> tuple[str, str | None]:
         非 skip 时 reason 为 None。
     """
     if spec.width < spec.height:
-        return C.STRATEGY_SKIP, "竖屏视频，按规则跳过"
+        return Strategies.SKIP, "竖屏视频，按规则跳过"
 
     short_edge = spec.short_edge
     if short_edge <= C.MIN_SHORT_EDGE:
-        return C.STRATEGY_SKIP, f"短边 {short_edge} <= {C.MIN_SHORT_EDGE}，按规则跳过"
+        return Strategies.SKIP, f"短边 {short_edge} <= {C.MIN_SHORT_EDGE}，按规则跳过"
     if short_edge >= C.MAX_SHORT_EDGE:
-        return C.STRATEGY_SKIP, f"短边 {short_edge} >= {C.MAX_SHORT_EDGE}，按规则跳过"
+        return Strategies.SKIP, f"短边 {short_edge} >= {C.MAX_SHORT_EDGE}，按规则跳过"
 
     if spec.ratio < C.RATIO_THRESHOLD:
-        return C.STRATEGY_UPSCALE_4K, None
-    return C.STRATEGY_PAD_1600, None
+        return Strategies.UPSCALE_4K, None
+    return Strategies.PAD_1600, None
 
 
 def _processed_output(video_path: Path, strategy: str) -> Path:
-    if strategy == C.STRATEGY_UPSCALE_4K:
+    if strategy == Strategies.UPSCALE_4K:
         return video_path.with_name(f"{video_path.stem}_processed_4k.mp4")
-    if strategy == C.STRATEGY_PAD_1600:
+    if strategy == Strategies.PAD_1600:
         return video_path.with_name(f"{video_path.stem}_processed_pad1600.mp4")
     raise ValueError(f"未知策略: {strategy}")
 
@@ -149,7 +149,7 @@ def _processed_output(video_path: Path, strategy: str) -> Path:
 def _build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Path]:
     """根据策略构建 ffmpeg 命令和输出路径。"""
     output = _processed_output(video_path, strategy)
-    if strategy == C.STRATEGY_UPSCALE_4K:
+    if strategy == Strategies.UPSCALE_4K:
         vf = f"scale={C.TARGET_4K_WIDTH}:{C.TARGET_4K_HEIGHT}:flags=lanczos"
     else:
         vf = (
@@ -187,7 +187,7 @@ def _build_nvencc_command(
     """根据策略构建 NVEncC 命令和输出路径。"""
     output = _processed_output(video_path, strategy)
 
-    if strategy == C.STRATEGY_UPSCALE_4K:
+    if strategy == Strategies.UPSCALE_4K:
         output_res = f"{C.TARGET_4K_WIDTH}x{C.TARGET_4K_HEIGHT}"
         pad_args: list[str] = []
     else:
@@ -283,7 +283,7 @@ async def assessment_worker(
 
             strategy, reason = decide_video_strategy(video_spec)
 
-            if strategy == C.STRATEGY_SKIP:
+            if strategy == Strategies.SKIP:
                 task.state = States.DONE
                 save_all_progress(tasks, state_file)
                 logger.info("[%s] Skipped: %s", task.url, reason)
