@@ -122,8 +122,34 @@ class TestPrepareTasks:
 
 
 class TestMain:
+    def test_main_resolves_paths_when_dependency_check_skipped(self, monkeypatch):
+        monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.SKIP_CHECK_DEPENDENCIES", True)
+
+        calls = []
+        monkeypatch.setattr(
+            "yt_pipeline.cli.resolve_dependency_paths",
+            lambda: calls.append("resolve"),
+        )
+        monkeypatch.setattr(
+            "yt_pipeline.cli.check_dependencies",
+            lambda: (_ for _ in ()).throw(AssertionError("should be skipped")),
+        )
+        monkeypatch.setattr(
+            "yt_pipeline.cli.parse_args",
+            lambda: argparse.Namespace(resume=False, fresh=False, file=None, urls=[]),
+        )
+        monkeypatch.setattr("yt_pipeline.cli.prepare_tasks", lambda args: [])
+
+        from yt_pipeline.cli import main
+
+        main()
+
+        assert calls == ["resolve"]
+
     def test_main_no_tasks(self, monkeypatch):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.resolve_dependency_paths", lambda: None)
         monkeypatch.setattr("yt_pipeline.deps.check_dependencies", lambda: None)
         monkeypatch.setattr(
             "yt_pipeline.cli.parse_args",
@@ -145,6 +171,7 @@ class TestMain:
 
     def test_main_with_tasks(self, monkeypatch):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.resolve_dependency_paths", lambda: None)
         monkeypatch.setattr("yt_pipeline.deps.check_dependencies", lambda: None)
         monkeypatch.setattr(
             "yt_pipeline.cli.parse_args",
@@ -173,6 +200,7 @@ class TestMain:
         from yt_pipeline.deps import DependencyError
 
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.resolve_dependency_paths", lambda: None)
 
         def _fail():
             raise DependencyError("ffmpeg", "未找到 ffmpeg")

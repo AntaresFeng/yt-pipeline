@@ -26,6 +26,7 @@ Thumbs.db
 
 # Local workspace metadata
 .claude/
+.codex/
 
 # Local development files
 *.bak

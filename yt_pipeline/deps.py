@@ -61,6 +61,31 @@ def _verify_executable(path: str, name: str, *, version_arg: str = "-version") -
         )
 
 
+def resolve_dependency_paths() -> None:
+    """Resolve configured tool paths without launching external processes."""
+    config.FFMPEG_PATH = _resolve_tool_path("ffmpeg", config.FFMPEG_PATH)
+    logger.debug("Resolved ffmpeg path: %s", config.FFMPEG_PATH)
+
+    config.FFPROBE_PATH = _resolve_tool_path("ffprobe", config.FFPROBE_PATH)
+    logger.debug("Resolved ffprobe path: %s", config.FFPROBE_PATH)
+
+    backend = config.TRANSCODE_BACKEND.lower()
+    if backend == config.BACKEND_FFMPEG:
+        return
+    if backend != config.BACKEND_NVENCC:
+        raise DependencyError(
+            "transcode_backend",
+            f"Unknown transcode backend: {config.TRANSCODE_BACKEND}",
+        )
+
+    config.NVENCC_PATH = _resolve_tool_path(
+        "nvencc",
+        config.NVENCC_PATH,
+        candidates=NVENCC_CANDIDATES,
+    )
+    logger.debug("Resolved nvencc path: %s", config.NVENCC_PATH)
+
+
 def check_dependencies() -> None:
     """检测全部外部依赖。缺失时抛出 DependencyError。"""
     # yt-dlp
@@ -70,13 +95,11 @@ def check_dependencies() -> None:
         raise DependencyError("yt-dlp", "未找到 yt-dlp，请安装: pip install yt-dlp")
     logger.debug("OK: yt-dlp")
 
-    # ffmpeg
-    config.FFMPEG_PATH = _resolve_tool_path("ffmpeg", config.FFMPEG_PATH)
+    resolve_dependency_paths()
+
     _verify_executable(config.FFMPEG_PATH, "ffmpeg")
     logger.debug("OK: ffmpeg (%s)", config.FFMPEG_PATH)
 
-    # ffprobe
-    config.FFPROBE_PATH = _resolve_tool_path("ffprobe", config.FFPROBE_PATH)
     _verify_executable(config.FFPROBE_PATH, "ffprobe")
     logger.debug("OK: ffprobe (%s)", config.FFPROBE_PATH)
 
@@ -89,10 +112,5 @@ def check_dependencies() -> None:
             f"未知转码后端: {config.TRANSCODE_BACKEND}",
         )
 
-    config.NVENCC_PATH = _resolve_tool_path(
-        "nvencc",
-        config.NVENCC_PATH,
-        candidates=NVENCC_CANDIDATES,
-    )
     _verify_executable(config.NVENCC_PATH, "nvencc", version_arg="--version")
     logger.debug("OK: nvencc (%s)", config.NVENCC_PATH)

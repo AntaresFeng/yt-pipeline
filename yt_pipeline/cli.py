@@ -8,10 +8,10 @@ import logging
 import sys
 
 from yt_pipeline.config import STATE_FILE, SKIP_CHECK_DEPENDENCIES
-from yt_pipeline.deps import DependencyError, check_dependencies
-from yt_pipeline.pipeline import ShutdownManager, run_pipeline
-from yt_pipeline.model import Task, States, RESUME_RESET
+from yt_pipeline.deps import DependencyError, check_dependencies, resolve_dependency_paths
+from yt_pipeline.model import RESUME_RESET, Task, States
 from yt_pipeline.persistence import load_progress
+from yt_pipeline.pipeline import ShutdownManager, run_pipeline
 from yt_pipeline.url_collector import collect_urls
 
 logger = logging.getLogger("pipeline")
@@ -114,12 +114,15 @@ async def _run_pipeline(tasks: list[Task]) -> None:
 
 def main() -> None:
     _setup_logging()
-    if not SKIP_CHECK_DEPENDENCIES:
-        try:
+    try:
+        if SKIP_CHECK_DEPENDENCIES:
+            resolve_dependency_paths()
+        else:
             check_dependencies()
-        except DependencyError as e:
-            logger.error("依赖检查失败: %s", e)
-            sys.exit(1)
+    except DependencyError as e:
+        logger.error("Dependency check failed: %s", e)
+        sys.exit(1)
+
     args = parse_args()
     try:
         tasks = prepare_tasks(args)

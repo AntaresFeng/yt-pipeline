@@ -10,6 +10,7 @@ from yt_pipeline.deps import (
     _resolve_tool_path,
     _verify_executable,
     check_dependencies,
+    resolve_dependency_paths,
 )
 
 
@@ -91,6 +92,31 @@ class TestVerifyExecutable:
 
 
 class TestCheckDependencies:
+    def test_resolve_dependency_paths_without_verifying(self, monkeypatch):
+        monkeypatch.setattr(config, "TRANSCODE_BACKEND", "nvencc", raising=False)
+        monkeypatch.setattr(config, "FFMPEG_PATH", None)
+        monkeypatch.setattr(config, "FFPROBE_PATH", None)
+        monkeypatch.setattr(config, "NVENCC_PATH", None, raising=False)
+
+        def _which(name):
+            return {
+                "ffmpeg": "/usr/bin/ffmpeg",
+                "ffprobe": "/usr/bin/ffprobe",
+                "NVEncC64.exe": "C:/Tools/NVEncC64.exe",
+            }.get(name)
+
+        def _run(*args, **kwargs):
+            raise AssertionError("resolve_dependency_paths must not verify tools")
+
+        monkeypatch.setattr("shutil.which", _which)
+        monkeypatch.setattr("subprocess.run", _run)
+
+        resolve_dependency_paths()
+
+        assert config.FFMPEG_PATH == "/usr/bin/ffmpeg"
+        assert config.FFPROBE_PATH == "/usr/bin/ffprobe"
+        assert config.NVENCC_PATH == "C:/Tools/NVEncC64.exe"
+
     def test_all_ok(self, monkeypatch):
         monkeypatch.setattr(config, "TRANSCODE_BACKEND", "ffmpeg", raising=False)
         monkeypatch.setattr(config, "FFMPEG_PATH", "/usr/bin/ffmpeg")
