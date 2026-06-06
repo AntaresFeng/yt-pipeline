@@ -6,6 +6,12 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _patch_output_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr("yt_pipeline.config.OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("yt_pipeline.download_worker.OUTPUT_DIR", tmp_path)
+
+
 @pytest.fixture
 def chdir(tmp_path: Path):
     """切换工作目录到 tmp_path，测试结束后自动恢复。"""

@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from yt_pipeline.config import VIDEO_EXTS, IMAGE_EXTS, MAX_TITLE_LENGTH
+from yt_pipeline.config import VIDEO_EXTS, IMAGE_EXTS, OUTPUT_DIR, YDL_OPTS
 from yt_pipeline.model import Task, States
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
@@ -44,7 +44,7 @@ def find_media_file(video_id: str, exts: set[str]) -> Path | None:
     """按 video_id glob 查找媒体文件，按扩展名过滤。"""
     candidates = [
         p
-        for p in Path.cwd().glob(f"*{video_id}*")
+        for p in OUTPUT_DIR.glob(f"*{video_id}*")
         if p.is_file() and p.suffix.lower() in exts
     ]
     return candidates[0] if candidates else None
@@ -79,20 +79,8 @@ def _do_download(url: str) -> dict:
     import yt_dlp
 
     ydl_logger = WorkerLogger(label=url)
-    ydl_opts = {
-        "logger": ydl_logger,
-        "writethumbnail": True,
-        "writesubtitles": True,
-        "subtitlesformat": "srt",
-        "outtmpl": f"%(title).{MAX_TITLE_LENGTH}B [%(id)s].%(ext)s",
-        "postprocessors": [
-            {
-                "key": "FFmpegThumbnailsConvertor",
-                "format": "png",
-                "when": "before_dl",
-            }
-        ],
-    }
+    ydl_opts = YDL_OPTS.copy()
+    ydl_opts["logger"] = ydl_logger
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:

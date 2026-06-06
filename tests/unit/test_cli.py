@@ -122,9 +122,12 @@ class TestPrepareTasks:
 
 
 class TestMain:
-    def test_main_resolves_paths_when_dependency_check_skipped(self, monkeypatch):
+    def test_main_resolves_paths_when_dependency_check_skipped(
+        self, monkeypatch, tmp_path
+    ):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
         monkeypatch.setattr("yt_pipeline.cli.SKIP_CHECK_DEPENDENCIES", True)
+        monkeypatch.setattr("yt_pipeline.cli.OUTPUT_DIR", tmp_path)
 
         calls = []
         monkeypatch.setattr(
@@ -147,9 +150,10 @@ class TestMain:
 
         assert calls == ["resolve"]
 
-    def test_main_no_tasks(self, monkeypatch):
+    def test_main_no_tasks(self, monkeypatch, tmp_path):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
         monkeypatch.setattr("yt_pipeline.cli.resolve_dependency_paths", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.OUTPUT_DIR", tmp_path)
         monkeypatch.setattr("yt_pipeline.deps.check_dependencies", lambda: None)
         monkeypatch.setattr(
             "yt_pipeline.cli.parse_args",
@@ -169,9 +173,10 @@ class TestMain:
         main()
         assert len(called) == 0
 
-    def test_main_with_tasks(self, monkeypatch):
+    def test_main_with_tasks(self, monkeypatch, tmp_path):
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
         monkeypatch.setattr("yt_pipeline.cli.resolve_dependency_paths", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.OUTPUT_DIR", tmp_path)
         monkeypatch.setattr("yt_pipeline.deps.check_dependencies", lambda: None)
         monkeypatch.setattr(
             "yt_pipeline.cli.parse_args",
@@ -194,13 +199,14 @@ class TestMain:
         main()
         assert len(called) == 1
 
-    def test_main_dependency_missing(self, monkeypatch):
+    def test_main_dependency_missing(self, monkeypatch, tmp_path):
         import argparse
 
         from yt_pipeline.deps import DependencyError
 
         monkeypatch.setattr("yt_pipeline.cli._setup_logging", lambda: None)
         monkeypatch.setattr("yt_pipeline.cli.resolve_dependency_paths", lambda: None)
+        monkeypatch.setattr("yt_pipeline.cli.OUTPUT_DIR", tmp_path)
 
         def _fail():
             raise DependencyError("ffmpeg", "未找到 ffmpeg")

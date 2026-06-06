@@ -7,8 +7,12 @@ import asyncio
 import logging
 import sys
 
-from yt_pipeline.config import STATE_FILE, SKIP_CHECK_DEPENDENCIES
-from yt_pipeline.deps import DependencyError, check_dependencies, resolve_dependency_paths
+from yt_pipeline.config import STATE_FILE, OUTPUT_DIR, SKIP_CHECK_DEPENDENCIES
+from yt_pipeline.deps import (
+    DependencyError,
+    check_dependencies,
+    resolve_dependency_paths,
+)
 from yt_pipeline.model import RESUME_RESET, Task, States
 from yt_pipeline.persistence import load_progress
 from yt_pipeline.pipeline import ShutdownManager, run_pipeline
@@ -123,6 +127,7 @@ def main() -> None:
         logger.error("Dependency check failed: %s", e)
         sys.exit(1)
 
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     args = parse_args()
     try:
         tasks = prepare_tasks(args)

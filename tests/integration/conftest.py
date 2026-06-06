@@ -133,6 +133,8 @@ def pipeline_env(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(config, "FFPROBE_PATH", "ffprobe")
     monkeypatch.setattr(config, "TRANSCODE_BACKEND", "nvencc", raising=False)
     monkeypatch.setattr(config, "NVENCC_PATH", "NVEncC64.exe", raising=False)
+    monkeypatch.setattr(config, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("yt_pipeline.download_worker.OUTPUT_DIR", tmp_path)
 
     orig = os.getcwd()
     os.chdir(tmp_path)

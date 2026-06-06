@@ -5,7 +5,10 @@ from pathlib import Path
 
 # ---- 运行时配置（可通过环境变量覆盖）----
 DOWNLOAD_CONCURRENCY: int = int(os.environ.get("PIPELINE_DOWNLOAD_CONCURRENCY", "2"))
-STATE_FILE: Path = Path(os.environ.get("PIPELINE_STATE_FILE", "progress.json"))
+OUTPUT_DIR: Path = Path(os.environ.get("PIPELINE_OUTPUT_DIR", "."))
+STATE_FILE: Path = Path(
+    os.environ.get("PIPELINE_STATE_FILE", str(OUTPUT_DIR / "progress.json"))
+)
 
 # ---- 外部工具路径 ----
 FFMPEG_PATH: str | None = None  # 可手动指定 FFmpeg 路径，留空则 which 查找
@@ -45,6 +48,21 @@ NVENCC_AUDIO_CODEC: str = "aac"
 NVENCC_AUDIO_BITRATE: int = 192  # NVEncC 的 --audio-bitrate 单位是 kbps，传整数不带 "k"
 
 # ---- 下载 ----
-MAX_TITLE_LENGTH = 180
 VIDEO_EXTS: set[str] = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 IMAGE_EXTS: set[str] = {".png", ".jpg", ".jpeg", ".webp"}
+YDL_OPTS = {
+    "retries": 10,  # 重试 10 次，和 CLI 默认一致
+    "fragment_retries": 10,
+    "noplaylist": True,
+    "writethumbnail": True,
+    "writesubtitles": True,
+    "subtitlesformat": "srt",
+    "paths": {"home": str(OUTPUT_DIR)},
+    "postprocessors": [
+        {
+            "key": "FFmpegThumbnailsConvertor",
+            "format": "png",
+            "when": "before_dl",
+        }
+    ],
+}
