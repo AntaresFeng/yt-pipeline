@@ -37,6 +37,7 @@ TODO
 # Local config (machine-specific)
 .python-version
 test_url.txt
+yt_pipeline/config.py
 
 # Runtime artifacts
 progress.json
