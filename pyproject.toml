@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
-yt-pipeline = "yt_pipeline.cli:main"
+ytpp = "yt_pipeline.cli:main"
 
 [project.optional-dependencies]
 dev = [
