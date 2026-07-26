@@ -34,10 +34,9 @@ Thumbs.db
 *.todo
 TODO
 
-# Local config (machine-specific)
+# Local-only files
 .python-version
 test_url.txt
-yt_pipeline/config.py
 
 # Runtime artifacts
 progress.json
