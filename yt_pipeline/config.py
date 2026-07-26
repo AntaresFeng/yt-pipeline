@@ -35,10 +35,11 @@ TARGET_ASPECT_RATIO = 16 / 9
 # ---- 封面处理 ----
 THUMBNAIL_MIN_HEIGHT = 720
 
-# ---- 编码参数 ----
-FFMPEG_CRF: int = 18
-FFMPEG_PRESET: str = "slow"
-FFMPEG_AUDIO_BITRATE: str = "192k"  # ffmpeg 的 -b:a 参数使用带单位的字符串，例如 "192k"
+# ---- 编码参数：ffmpeg/libsvtav1 后端 ----
+FFMPEG_PRESET: int = 6       # SVT-AV1 preset，-2~13；6 = 平衡档（VOD 最佳点）
+FFMPEG_CRF: int = 29         # SVT-AV1 CRF，0~63；29 = 平衡档
+FFMPEG_GOP: int = 300        # GOP，10×帧率且 ≤300；300 = YouTube 通用安全上限
+FFMPEG_SVTAV1_PARAMS: str = "tune=0"  # svtav1-params，tune=0 = VQ 视觉质量
 
 NVENCC_CODEC: str = "hevc"
 NVENCC_QVBR: int = 23

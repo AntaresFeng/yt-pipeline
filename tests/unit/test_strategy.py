@@ -24,6 +24,17 @@ STRATEGY_PARAMS = [
 ]
 
 
+@pytest.fixture
+def ffmpeg_backend(monkeypatch):
+    """注入 ffmpeg/libsvtav1 后端常量，供 build_transcode_command 走 ffmpeg 分支。"""
+    monkeypatch.setattr(C, "TRANSCODE_BACKEND", "ffmpeg")
+    monkeypatch.setattr(C, "FFMPEG_PATH", "ffmpeg", raising=False)
+    monkeypatch.setattr(C, "FFMPEG_PRESET", 6, raising=False)
+    monkeypatch.setattr(C, "FFMPEG_CRF", 29, raising=False)
+    monkeypatch.setattr(C, "FFMPEG_GOP", 300, raising=False)
+    monkeypatch.setattr(C, "FFMPEG_SVTAV1_PARAMS", "tune=0", raising=False)
+
+
 @pytest.mark.parametrize(
     "width, height, expected_strategy, expected_reason",
     STRATEGY_PARAMS,
@@ -103,12 +114,11 @@ class TestBuildTranscodeCommand:
         assert output.name.endswith("_processed_pad1600.mp4")
         assert output != video
 
-    def test_ffmpeg_backend_keeps_existing_upscale_command(
+    def test_ffmpeg_backend_upscale_4k_svtav1(
         self,
         tmp_path: Path,
-        monkeypatch,
+        ffmpeg_backend,
     ):
-        monkeypatch.setattr(C, "TRANSCODE_BACKEND", "ffmpeg")
         video = tmp_path / "test.mp4"
         video.touch()
         cmd, output = build_transcode_command(
@@ -118,13 +128,19 @@ class TestBuildTranscodeCommand:
         )
 
         assert cmd[0] == C.FFMPEG_PATH
-        assert "scale=3840:2160:flags=lanczos" in " ".join(cmd)
-        assert output.name.endswith("_processed_4k.mp4")
+        assert "scale=3840:2160:flags=lanczos" in _arg_after(cmd, "-vf")
+        assert _arg_after(cmd, "-c:v") == "libsvtav1"
+        assert _arg_after(cmd, "-preset") == "6"
+        assert _arg_after(cmd, "-crf") == "29"
+        assert _arg_after(cmd, "-g") == "300"
+        assert _arg_after(cmd, "-pix_fmt") == "yuv420p10le"
+        assert _arg_after(cmd, "-svtav1-params") == "tune=0"
+        assert _arg_after(cmd, "-c:a") == "copy"
+        assert "-b:a" not in cmd
+        assert "-movflags" not in cmd
+        assert output.name.endswith("_processed_4k.mkv")
 
-    def test_ffmpeg_backend_keeps_existing_pad_command(
-        self, tmp_path: Path, monkeypatch
-    ):
-        monkeypatch.setattr(C, "TRANSCODE_BACKEND", "ffmpeg")
+    def test_ffmpeg_backend_pad_1600_svtav1(self, tmp_path: Path, ffmpeg_backend):
         video = tmp_path / "test.mkv"
         video.touch()
         cmd, output = build_transcode_command(
@@ -134,8 +150,17 @@ class TestBuildTranscodeCommand:
         )
 
         assert cmd[0] == C.FFMPEG_PATH
-        assert "pad=iw:1600:0:" in " ".join(cmd)
-        assert output.name.endswith("_processed_pad1600.mp4")
+        assert "pad=iw:1600:0:" in _arg_after(cmd, "-vf")
+        assert _arg_after(cmd, "-c:v") == "libsvtav1"
+        assert _arg_after(cmd, "-preset") == "6"
+        assert _arg_after(cmd, "-crf") == "29"
+        assert _arg_after(cmd, "-g") == "300"
+        assert _arg_after(cmd, "-pix_fmt") == "yuv420p10le"
+        assert _arg_after(cmd, "-svtav1-params") == "tune=0"
+        assert _arg_after(cmd, "-c:a") == "copy"
+        assert "-b:a" not in cmd
+        assert "-movflags" not in cmd
+        assert output.name.endswith("_processed_pad1600.mkv")
 
     def test_unknown_strategy_raises(self, tmp_path: Path):
         video = tmp_path / "test.mp4"

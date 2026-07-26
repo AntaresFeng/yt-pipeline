@@ -138,17 +138,23 @@ def decide_video_strategy(spec: StreamSpec) -> tuple[str, str | None]:
     return Strategies.PAD_1600, None
 
 
-def _processed_output(video_path: Path, strategy: str) -> Path:
-    if strategy == Strategies.UPSCALE_4K:
-        return video_path.with_name(f"{video_path.stem}_processed_4k.mp4")
-    if strategy == Strategies.PAD_1600:
-        return video_path.with_name(f"{video_path.stem}_processed_pad1600.mp4")
-    raise ValueError(f"未知策略: {strategy}")
+_STRATEGY_OUTPUT_TAG = {
+    Strategies.UPSCALE_4K: "4k",
+    Strategies.PAD_1600: "pad1600",
+}
+
+
+def _processed_output(video_path: Path, strategy: str, *, ext: str = "mp4") -> Path:
+    if strategy not in _STRATEGY_OUTPUT_TAG:
+        raise ValueError(f"未知策略: {strategy}")
+    return video_path.with_name(
+        f"{video_path.stem}_processed_{_STRATEGY_OUTPUT_TAG[strategy]}.{ext}"
+    )
 
 
 def _build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Path]:
-    """根据策略构建 ffmpeg 命令和输出路径。"""
-    output = _processed_output(video_path, strategy)
+    """根据策略构建 ffmpeg/libsvtav1 命令和输出路径（mkv 容器、音频 copy）。"""
+    output = _processed_output(video_path, strategy, ext="mkv")
     if strategy == Strategies.UPSCALE_4K:
         vf = f"scale={C.TARGET_4K_WIDTH}:{C.TARGET_4K_HEIGHT}:flags=lanczos"
     else:
@@ -162,12 +168,13 @@ def _build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], P
         C.FFMPEG_PATH, "-hide_banner", "-y",
         "-i", str(video_path),
         "-vf", vf,
-        "-map", "0:v:0", "-map", "0:a?",
-        "-c:v", "libx264", "-crf", str(C.FFMPEG_CRF),
-        "-preset", C.FFMPEG_PRESET,
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", C.FFMPEG_AUDIO_BITRATE,
-        "-movflags", "+faststart",
+        # 0:V:0 大写 V：首个非封面/缩略图视频流；0:a?/0:s? 音频/字幕可选 mux
+        "-map", "0:V:0", "-map", "0:a?", "-map", "0:s?",
+        "-c:v", "libsvtav1", "-preset", str(C.FFMPEG_PRESET), "-crf", str(C.FFMPEG_CRF),
+        "-g", str(C.FFMPEG_GOP),
+        "-pix_fmt", "yuv420p10le",
+        "-svtav1-params", C.FFMPEG_SVTAV1_PARAMS,
+        "-c:a", "copy",
         str(output),
     ]
     # fmt: on

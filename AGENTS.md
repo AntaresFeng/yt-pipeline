@@ -43,7 +43,7 @@ ruff format                                   # 代码格式化
 
 默认转码后端：NVEncC（`PIPELINE_TRANSCODE_BACKEND=nvencc`）。
 
-默认编码：HEVC, QVBR 23, Quality preset, 8-bit, AAC 192k。ffmpeg 后端保留 H.264 CRF 18, Slow, AAC 192k。
+默认编码：HEVC, QVBR 23, Quality preset, 8-bit, AAC 192k。ffmpeg 后端使用 libsvtav1, preset 6, CRF 29, GOP 300, 10-bit, tune=0, 音频 copy, mkv 容器。
 
 ## 状态机
 
