@@ -156,7 +156,10 @@ def _build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], P
     """根据策略构建 ffmpeg/libsvtav1 命令和输出路径（mkv 容器、音频 copy）。"""
     output = _processed_output(video_path, strategy, ext="mkv")
     if strategy == Strategies.UPSCALE_4K:
-        vf = f"scale={C.TARGET_4K_WIDTH}:{C.TARGET_4K_HEIGHT}:flags=lanczos"
+        vf = (
+            f"scale={C.TARGET_4K_WIDTH}:{C.TARGET_4K_HEIGHT}:flags=lanczos"
+            f":force_original_aspect_ratio=decrease:force_divisible_by=2"
+        )
     else:
         vf = (
             f"scale=trunc(iw/2)*2:trunc(ih/2)*2,"
@@ -195,7 +198,14 @@ def _build_nvencc_command(
     output = _processed_output(video_path, strategy)
 
     if strategy == Strategies.UPSCALE_4K:
-        output_res = f"{C.TARGET_4K_WIDTH}x{C.TARGET_4K_HEIGHT}"
+        target_ratio = C.TARGET_4K_WIDTH / C.TARGET_4K_HEIGHT
+        if spec.ratio > target_ratio:
+            out_w = C.TARGET_4K_WIDTH
+            out_h = _even_floor(round(out_w / spec.ratio))
+        else:
+            out_h = C.TARGET_4K_HEIGHT
+            out_w = _even_floor(round(out_h * spec.ratio))
+        output_res = f"{out_w}x{out_h}"
         pad_args: list[str] = []
     else:
         resize_w = _even_floor(spec.width)

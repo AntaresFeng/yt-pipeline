@@ -85,7 +85,7 @@ class TestBuildTranscodeCommand:
         assert cmd[0] == "NVEncC64.exe"
         assert "--avsw" in cmd
         assert "--avhw" not in cmd
-        assert _arg_after(cmd, "--output-res") == "3840x2160"
+        assert _arg_after(cmd, "--output-res") == "3836x2160"
         assert _arg_after(cmd, "--vpp-resize") == "spline36"
         assert "--vpp-pad" not in cmd
         assert _arg_after(cmd, "--codec") == "hevc"
@@ -98,6 +98,28 @@ class TestBuildTranscodeCommand:
         assert _arg_after(cmd, "-o") == str(output)
         assert output.name.endswith("_processed_4k.mp4")
         assert output != video
+
+    @pytest.mark.parametrize(
+        "width, height, expected_res",
+        [
+            (2560, 1440, "3840x2160"),  # 恰好 16:9, 不变
+            (1440, 1080, "2880x2160"),  # 4:3, 高度顶满
+            (1920, 800, "3840x1600"),  # 2.4:1, 宽度顶满
+        ],
+        ids=["exact_16_9", "4_3", "2_4_1"],
+    )
+    def test_nvencc_upscale_4k_preserves_aspect_ratio(
+        self, tmp_path: Path, width, height, expected_res
+    ):
+        video = tmp_path / "test.mp4"
+        video.touch()
+        cmd, _ = build_transcode_command(
+            video,
+            "upscale_4k",
+            StreamSpec(width=width, height=height),
+        )
+        assert _arg_after(cmd, "--output-res") == expected_res
+        assert "--vpp-pad" not in cmd
 
     def test_nvencc_pad_1600(self, tmp_path: Path):
         video = tmp_path / "test.mkv"
@@ -128,7 +150,12 @@ class TestBuildTranscodeCommand:
         )
 
         assert cmd[0] == C.FFMPEG_PATH
-        assert "scale=3840:2160:flags=lanczos" in _arg_after(cmd, "-vf")
+        vf = _arg_after(cmd, "-vf")
+        assert (
+            "scale=3840:2160:flags=lanczos:force_original_aspect_ratio=decrease"
+            in vf
+        )
+        assert "force_divisible_by=2" in vf
         assert _arg_after(cmd, "-c:v") == "libsvtav1"
         assert _arg_after(cmd, "-preset") == "6"
         assert _arg_after(cmd, "-crf") == "29"

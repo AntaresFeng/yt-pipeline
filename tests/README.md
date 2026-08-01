@@ -50,7 +50,7 @@ Mock 最低外部边界（`_do_download`、`run_command`、`run_transcode`），
 
 | 场景类 | 测试数 | 验证内容 |
 |--------|--------|----------|
-| `TestFullPipeline` | 2 | upscale_4k（1920x1081→NVEncC output-res 3840x2160）、pad_1600（3840x1081→NVEncC pad 0,260,0,260）全链路 pending→done |
+| `TestFullPipeline` | 2 | upscale_4k（1920x1081→NVEncC output-res 3836x2160）、pad_1600（3840x1081→NVEncC pad 0,260,0,260）全链路 pending→done |
 | `TestSkipStrategy` | 1 | 1920x1080 skip：不经 processing_video，run_transcode 未被调用 |
 | `TestShutdown` | 3 | download/assessment/transcode 阶段触发 shutdown，任务分别保留 DOWNLOADING / DOWNLOADED / PROCESSING_VIDEO 状态 |
 | `TestResume` | 1 | DOWNLOADING 中断恢复：RESUME_RESET 回退到 PENDING→重新走完全链路 |

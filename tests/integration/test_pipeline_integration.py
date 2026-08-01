@@ -20,7 +20,7 @@ class TestFullPipeline:
 
         assert task.state == States.DONE
         assert any(cmd[0] == "NVEncC64.exe" for cmd in mock_transcode)
-        assert any("--output-res 3840x2160" in " ".join(cmd) for cmd in mock_transcode)
+        assert any("--output-res 3836x2160" in " ".join(cmd) for cmd in mock_transcode)
         assert len(mock_transcode) == 1
 
     async def test_full_pipeline_pad(
