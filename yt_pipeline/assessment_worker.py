@@ -133,7 +133,7 @@ def decide_video_strategy(spec: StreamSpec) -> tuple[str, str | None]:
     if short_edge >= C.MAX_SHORT_EDGE:
         return Strategies.SKIP, f"短边 {short_edge} >= {C.MAX_SHORT_EDGE}，按规则跳过"
 
-    if spec.ratio < C.RATIO_THRESHOLD:
+    if spec.ratio <= C.RATIO_THRESHOLD:
         return Strategies.UPSCALE_4K, None
     return Strategies.PAD_1600, None
 

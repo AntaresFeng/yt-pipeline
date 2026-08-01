@@ -17,9 +17,10 @@ STRATEGY_PARAMS = [
     (1920, 1080, "skip", "1080"),
     # 短边 ≥ 1600 → skip（边界值）
     (2560, 1600, "skip", "1600"),
-    # 1081–1599, ratio < 2.0 → upscale_4k
+    # 1081–1599, ratio ≤ 2.0 → upscale_4k
     (2560, 1440, "upscale_4k", None),  # 2k 16:9 视频
-    # 1081–1599, ratio ≥ 2.0 → pad_1600
+    (2560, 1280, "upscale_4k", None),  # ratio = 2.0 边界
+    # 1081–1599, ratio > 2.0 → pad_1600
     (3440, 1440, "pad_1600", None),  # 超宽
 ]
 
@@ -42,8 +43,9 @@ def ffmpeg_backend(monkeypatch):
         "竖屏_skip",
         "短边=1080_skip",
         "短边=1600_skip",
-        "短边=1081_ratio<2_upscale_4k",
-        "短边=1081_ratio>=2_pad_1600",
+        "短边=1081_ratio<=2_upscale_4k",
+        "短边=1081_ratio=2.0_upscale_4k",
+        "短边=1081_ratio>2_pad_1600",
     ],
 )
 def test_decide_strategy(width, height, expected_strategy, expected_reason):
