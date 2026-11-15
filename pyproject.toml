@@ -4,7 +4,9 @@ version = "0.2.0"
 description = "Video batch-processing pipeline with graceful shutdown and interrupt-resume."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "yt-dlp",
+]
 
 [project.scripts]
 ytpp = "yt_pipeline.cli:main"
@@ -15,6 +17,9 @@ dev = [
     "pytest-asyncio",
     "pytest-cov",
     "pytest-timeout",
+]
+clipboard = [
+    "pyperclip",
 ]
 
 [tool.pytest.ini_options]
