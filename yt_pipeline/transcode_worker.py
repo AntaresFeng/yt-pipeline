@@ -161,7 +161,7 @@ async def transcode_worker(
                 task.url,
             )
             raise
-        except Exception as e:  # noqa: BLE001 - worker 兜底：异常统一标记任务失败
+        except Exception as e:
             handle_worker_error(task, e, tasks, state_file)
         finally:
             transcode_queue.task_done()

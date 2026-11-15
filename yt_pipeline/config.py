@@ -36,9 +36,9 @@ TARGET_ASPECT_RATIO = 16 / 9
 THUMBNAIL_MIN_HEIGHT = 720
 
 # ---- 编码参数：SVT-AV1（libsvtav1）----
-FFMPEG_PRESET: int = 6       # SVT-AV1 preset，-2~13；6 = 平衡档（VOD 最佳点）
-FFMPEG_CRF: int = 29         # SVT-AV1 CRF，0~63；29 = 平衡档
-FFMPEG_GOP: int = 300        # GOP，10×帧率且 ≤300；300 = YouTube 通用安全上限
+FFMPEG_PRESET: int = 6  # SVT-AV1 preset，-2~13；6 = 平衡档（VOD 最佳点）
+FFMPEG_CRF: int = 29  # SVT-AV1 CRF，0~63；29 = 平衡档
+FFMPEG_GOP: int = 300  # GOP，10×帧率且 ≤300；300 = YouTube 通用安全上限
 FFMPEG_SVTAV1_PARAMS: str = "tune=0"  # svtav1-params，tune=0 = VQ 视觉质量
 
 # ---- 编码参数：NVENC（hevc_nvenc）----

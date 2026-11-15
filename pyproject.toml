@@ -22,6 +22,16 @@ clipboard = [
     "pyperclip",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# worker 的兜底 except Exception：异常统一交给 handle_worker_error 标记任务失败
+"yt_pipeline/assessment_worker.py" = ["BLE001"]
+"yt_pipeline/download_worker.py" = ["BLE001"]
+"yt_pipeline/transcode_worker.py" = ["BLE001"]
+# 进度文件损坏时回退到全新运行
+"yt_pipeline/persistence.py" = ["BLE001"]
+# 剪贴板轮询：读取失败直接忽略并重试
+"yt_pipeline/url_collector.py" = ["BLE001", "S110"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 timeout = 120

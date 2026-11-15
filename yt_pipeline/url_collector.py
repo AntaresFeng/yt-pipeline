@@ -121,6 +121,6 @@ class _ClipboardMonitor:
                 if cur and cur != self._last:
                     self._last = cur
                     self._items.append(cur)
-            except Exception:  # noqa: S110, BLE001 - 剪贴板轮询，读取失败直接忽略
+            except Exception:
                 pass
             time.sleep(0.5)

@@ -32,11 +32,13 @@ CLI 通过 `optparse` 的 `default=10` 设置默认值，而 API 调用 `Youtube
 **API 调用要与 CLI 行为一致**，需显式传入：
 
 ```python
-yt_dlp.YoutubeDL({
-    'retries': 10,
-    'fragment_retries': 10,
-    # extractor_retries 和 file_access_retries 本身默认 3，无需额外设置
-})
+yt_dlp.YoutubeDL(
+    {
+        "retries": 10,
+        "fragment_retries": 10,
+        # extractor_retries 和 file_access_retries 本身默认 3，无需额外设置
+    }
+)
 ```
 
 ## 异常类层级与重试行为

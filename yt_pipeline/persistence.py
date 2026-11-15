@@ -26,7 +26,7 @@ def load_progress(state_file: Path) -> list[Task] | None:
     except json.JSONDecodeError:
         logger.error("Failed to parse progress file: invalid JSON.")
         return None
-    except Exception as e:  # noqa: BLE001 - 进度文件损坏时回退到全新运行
+    except Exception as e:
         logger.error(f"Failed to load progress: {e}")
         return None
 

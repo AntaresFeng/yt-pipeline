@@ -214,7 +214,7 @@ async def download_worker(
             except asyncio.CancelledError:
                 logger.warning("[%s] Download cancelled by shutdown", task.url)
                 raise
-            except Exception as e:  # noqa: BLE001 - worker 兜底：异常统一标记任务失败
+            except Exception as e:
                 handle_worker_error(task, e, tasks, state_file)
             finally:
                 pending_queue.task_done()
