@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 
-import yt_pipeline.config as config
+from yt_pipeline import config
 
 logger = logging.getLogger("pipeline.deps")
 
@@ -44,6 +44,7 @@ def _verify_executable(path: str, name: str, *, version_arg: str = "-version") -
         result = subprocess.run(
             [path, version_arg],
             capture_output=True,
+            check=False,
             timeout=10,
         )
     except FileNotFoundError:

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yt_pipeline.config as C
-from yt_pipeline.model import Task, States, Strategies, StreamSpec
+from yt_pipeline.model import States, Strategies, StreamSpec, Task
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
 
@@ -289,7 +289,7 @@ async def assessment_worker(
             if thumb_spec is not None and thumb_spec.height < C.THUMBNAIL_MIN_HEIGHT:
                 try:
                     await process_thumbnail(Path(task.thumbnail_path))
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - 封面失败不影响视频处理
                     logger.warning("[%s] Cover processing skipped: %s", task.url, e)
 
             strategy, reason = decide_video_strategy(video_spec)
@@ -307,7 +307,7 @@ async def assessment_worker(
         except asyncio.CancelledError:
             logger.warning("[%s] Assessment cancelled", task.url)
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - worker 兜底：异常统一标记任务失败
             handle_worker_error(task, e, tasks, state_file)
         finally:
             assessment_queue.task_done()

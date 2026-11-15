@@ -7,10 +7,10 @@ import logging
 import signal
 from pathlib import Path
 
-from yt_pipeline.config import DOWNLOAD_CONCURRENCY
-from yt_pipeline.model import Task, States
-from yt_pipeline.download_worker import download_worker
 from yt_pipeline.assessment_worker import assessment_worker
+from yt_pipeline.config import DOWNLOAD_CONCURRENCY
+from yt_pipeline.download_worker import download_worker
+from yt_pipeline.model import States, Task
 from yt_pipeline.transcode_worker import transcode_worker
 
 logger = logging.getLogger("pipeline")

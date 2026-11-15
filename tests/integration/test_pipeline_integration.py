@@ -2,7 +2,7 @@
 
 import asyncio
 
-from yt_pipeline.model import Task, States, RESUME_RESET
+from yt_pipeline.model import RESUME_RESET, States, Task
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.pipeline import run_pipeline
 

@@ -1,10 +1,11 @@
 """cli 单元测试：参数解析、任务准备、主流程调度。"""
 
 import argparse
+
 import pytest
 
 from yt_pipeline.cli import parse_args, prepare_tasks
-from yt_pipeline.model import Task, States
+from yt_pipeline.model import States, Task
 
 
 class TestParseArgs:

@@ -7,7 +7,6 @@ import pytest
 
 from yt_pipeline.pipeline import ShutdownManager
 
-
 # ---- Mock 数据常量 ----
 
 FFPROBE_1081 = (
@@ -139,7 +138,7 @@ def pipeline_env(tmp_path: Path, monkeypatch):
     """组合 fixture：tmp_path + chdir + ShutdownManager + state_file 路径。"""
     import os
 
-    import yt_pipeline.config as config
+    from yt_pipeline import config
 
     monkeypatch.setattr(config, "FFMPEG_PATH", "ffmpeg")
     monkeypatch.setattr(config, "FFPROBE_PATH", "ffprobe")

@@ -8,8 +8,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from yt_pipeline.config import VIDEO_EXTS, IMAGE_EXTS, OUTPUT_DIR, YDL_OPTS
-from yt_pipeline.model import Task, States
+from yt_pipeline.config import IMAGE_EXTS, OUTPUT_DIR, VIDEO_EXTS, YDL_OPTS
+from yt_pipeline.model import States, Task
 from yt_pipeline.persistence import save_all_progress
 from yt_pipeline.utils import handle_worker_error
 
@@ -214,7 +214,7 @@ async def download_worker(
             except asyncio.CancelledError:
                 logger.warning("[%s] Download cancelled by shutdown", task.url)
                 raise
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - worker 兜底：异常统一标记任务失败
                 handle_worker_error(task, e, tasks, state_file)
             finally:
                 pending_queue.task_done()

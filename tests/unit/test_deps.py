@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-import yt_pipeline.config as config
+from yt_pipeline import config
 from yt_pipeline.deps import (
     DependencyError,
     _resolve_tool_path,

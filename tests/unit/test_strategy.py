@@ -5,9 +5,8 @@ from pathlib import Path
 import pytest
 
 import yt_pipeline.config as C
+from yt_pipeline.assessment_worker import build_transcode_command, decide_video_strategy
 from yt_pipeline.model import StreamSpec
-from yt_pipeline.assessment_worker import decide_video_strategy, build_transcode_command
-
 
 STRATEGY_PARAMS = [
     # (width, height, expected_strategy, expected_reason_keyword)

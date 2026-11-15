@@ -142,7 +142,7 @@ async def fix_read_stderr():
 async def main():
     if len(sys.argv) < 2:
         print("用法: python scripts/reproduce_communicate_bug.py [bug|fix|both]")
-        print("")
+        print()
         print("  bug  — 演示 communicate() 关闭 stdin 导致 'q' 无法送达")
         print("  fix  — 演示手动读 stderr 保持 stdin 打开，'q' 正常送达")
         print("  both — 依次运行两个对比")

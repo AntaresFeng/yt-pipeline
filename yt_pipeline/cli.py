@@ -7,13 +7,13 @@ import asyncio
 import logging
 import sys
 
-from yt_pipeline.config import STATE_FILE, OUTPUT_DIR, SKIP_CHECK_DEPENDENCIES
+from yt_pipeline.config import OUTPUT_DIR, SKIP_CHECK_DEPENDENCIES, STATE_FILE
 from yt_pipeline.deps import (
     DependencyError,
     check_dependencies,
     resolve_dependency_paths,
 )
-from yt_pipeline.model import RESUME_RESET, Task, States
+from yt_pipeline.model import RESUME_RESET, States, Task
 from yt_pipeline.persistence import load_progress
 from yt_pipeline.pipeline import ShutdownManager, run_pipeline
 from yt_pipeline.url_collector import collect_urls

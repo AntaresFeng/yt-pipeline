@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from yt_pipeline.model import Task, States
+from yt_pipeline.model import States, Task
 from yt_pipeline.persistence import save_all_progress
 
 logger = logging.getLogger("pipeline.utils")

@@ -1,6 +1,7 @@
 """StreamSpec 属性测试。"""
 
 import pytest
+
 from yt_pipeline.model import StreamSpec
 
 

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from yt_pipeline.url_collector import collect_urls, _filter
+from yt_pipeline.url_collector import _filter, collect_urls
 
 
 class TestCollectUrlsFromFile:
