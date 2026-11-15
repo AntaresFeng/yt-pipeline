@@ -6,7 +6,7 @@
 
 ## 项目架构
 
-视频批处理流水线 —— Python asyncio：yt-dlp 下载 → ffprobe 探测 → 策略决策 → NVEncC/ffmpeg 转码。
+视频批处理流水线 —— Python asyncio：yt-dlp 下载 → ffprobe 探测 → 策略决策 → ffmpeg（NVENC/libsvtav1）转码。
 
 | 文件 | 职责 |
 |------|------|
@@ -18,7 +18,7 @@
 | `config.py` | 配置参数和业务常量 |
 | `persistence.py` | progress.json 读写（原子写入 .tmp → replace） |
 | `utils.py` | handle_worker_error |
-| `deps.py` | 外部依赖检测（yt-dlp / ffmpeg / ffprobe / NVEncC） |
+| `deps.py` | 外部依赖检测（yt-dlp / ffmpeg / ffprobe） |
 | `cli.py` | CLI 入口 |
 | `url_collector.py` | URL 收集 |
 
@@ -41,9 +41,9 @@ ruff format                                   # 代码格式化
 | 横向 1081–1599，比例 ≤ 2.0 | 4K 超分（等比适配 3840×2160 框内，不 pad） |
 | 横向 1081–1599，比例 > 2.0 | 黑边填充到高 1600 |
 
-默认转码后端：NVEncC（`PIPELINE_TRANSCODE_BACKEND=nvencc`）。
+默认编码器：`nvenc`（`PIPELINE_ENCODER=nvenc`）—— ffmpeg + NVDEC 硬解 + CPU Lanczos + `hevc_nvenc`。
 
-默认编码：HEVC, QVBR 23, Quality preset, 8-bit, AAC 192k。ffmpeg 后端使用 libsvtav1, preset 6, CRF 29, GOP 300, 10-bit, tune=0, 音频 copy, mkv 容器。
+默认编码：HEVC Main 8-bit, `p4` / `hq` / VBR / cq 24 / Spatial AQ, AAC 256k 立体声, MP4（`hvc1` + `+faststart`）。AV1 等 NVDEC 不支持的编码自动软解（`PIPELINE_NVENC_HW_DECODE=0` 可全局关闭硬解）。软件编码器 `svtav1` 使用 libsvtav1, preset 6, CRF 29, GOP 300, 10-bit, tune=0, 音频 copy, mkv 容器。
 
 ## 状态机
 
@@ -63,5 +63,5 @@ ruff format                                   # 代码格式化
 
 ## 编码规范
 
-- **ffmpeg/ffprobe/NVEncC 命令列表**：必须用 `# fmt: off` / `# fmt: on` 包裹，语义连续的参数放同行
+- **ffmpeg/ffprobe 命令列表**：必须用 `# fmt: off` / `# fmt: on` 包裹**整个**列表，语义连续的参数放同行
 - **测试策略**：小改跑相关模块测试，重构/大修才跑全量，无需每次全局 `pytest tests/ -v`

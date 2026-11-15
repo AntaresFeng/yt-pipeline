@@ -11,31 +11,49 @@ class TestFullPipeline:
     async def test_full_pipeline_upscale(
         self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
     ):
-        """1920x1081 -> upscale_4k：全链路 pending->done，转码命令走 NVEncC。"""
-        mock_subprocess(ffprobe=(0, '{"streams":[{"width":1920,"height":1081}]}', ""))
+        """1920x1081 -> upscale_4k：全链路 pending->done，转码命令走 ffmpeg/NVENC。"""
+        mock_subprocess(
+            ffprobe=(
+                0,
+                '{"streams":[{"width":1920,"height":1081,"codec_name":"vp9"}]}',
+                "",
+            )
+        )
         task = Task(url="https://youtube.com/watch?v=testvid")
 
         state_file = pipeline_env / "progress.json"
         await run_pipeline([task], shutdown, state_file)
 
         assert task.state == States.DONE
-        assert any(cmd[0] == "NVEncC64.exe" for cmd in mock_transcode)
-        assert any("--output-res 3836x2160" in " ".join(cmd) for cmd in mock_transcode)
+        assert any(cmd[0] == "ffmpeg" for cmd in mock_transcode)
+        assert any("hevc_nvenc" in cmd for cmd in mock_transcode)
+        assert any("-hwaccel cuda" in " ".join(cmd) for cmd in mock_transcode)
+        assert any(
+            "scale=3840:2160:flags=lanczos" in " ".join(cmd) for cmd in mock_transcode
+        )
         assert len(mock_transcode) == 1
 
     async def test_full_pipeline_pad(
         self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
     ):
-        """3840x1081 -> pad_1600：全链路 pending->done，NVEncC 命令含具体 pad 值。"""
-        mock_subprocess(ffprobe=(0, '{"streams":[{"width":3840,"height":1081}]}', ""))
+        """3840x1081 -> pad_1600：全链路 pending->done，ffmpeg 命令含 pad 表达式。"""
+        mock_subprocess(
+            ffprobe=(
+                0,
+                '{"streams":[{"width":3840,"height":1081,"codec_name":"vp9"}]}',
+                "",
+            )
+        )
         task = Task(url="https://youtube.com/watch?v=testvid")
 
         state_file = pipeline_env / "progress.json"
         await run_pipeline([task], shutdown, state_file)
 
         assert task.state == States.DONE
-        assert any("--output-res 3840x1600" in " ".join(cmd) for cmd in mock_transcode)
-        assert any("--vpp-pad 0,260,0,260" in " ".join(cmd) for cmd in mock_transcode)
+        assert any("hevc_nvenc" in cmd for cmd in mock_transcode)
+        assert any(
+            "pad=iw:1600:0:(1600-ih)/2:black" in " ".join(cmd) for cmd in mock_transcode
+        )
         assert len(mock_transcode) == 1
 
 
@@ -44,7 +62,13 @@ class TestSkipStrategy:
         self, pipeline_env, mock_download, mock_subprocess, mock_transcode, shutdown
     ):
         """1920x1080 → skip：不经 processing_video，run_transcode 未被调用。"""
-        mock_subprocess(ffprobe=(0, '{"streams":[{"width":1920,"height":1080}]}', ""))
+        mock_subprocess(
+            ffprobe=(
+                0,
+                '{"streams":[{"width":1920,"height":1080,"codec_name":"vp9"}]}',
+                "",
+            )
+        )
         task = Task(url="https://youtube.com/watch?v=testvid")
 
         state_file = pipeline_env / "progress.json"

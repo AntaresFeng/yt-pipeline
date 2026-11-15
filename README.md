@@ -1,22 +1,27 @@
 # yt-pipeline
 
-视频批处理流水线 —— Python asyncio 实现：yt-dlp 下载、ffprobe 探测、策略决策（4K 超分/黑边填充）、NVEncC/ffmpeg 转码、优雅退出、断点续跑。
+视频批处理流水线 —— Python asyncio 实现：yt-dlp 下载、ffprobe 探测、策略决策（4K 超分/黑边填充）、ffmpeg（NVENC/libsvtav1）转码、优雅退出、断点续跑。
 
 ## 环境依赖
 
 | 工具 | 用途 | 安装方式 |
 |------|------|----------|
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 视频下载 | `pip install yt-dlp` |
-| [ffmpeg](https://ffmpeg.org/) | 封面处理；可选视频转码后端 | 系统包管理器或官网下载 |
+| [ffmpeg](https://ffmpeg.org/) | 封面处理；视频转码（需含 NVENC 支持） | 系统包管理器或官网下载 |
 | [ffprobe](https://ffmpeg.org/) | 媒体流信息探测 | 随 ffmpeg 一同安装 |
-| [NVEncC](https://github.com/rigaya/NVEnc) | 默认视频转码后端 | 下载 NVEnc release，并配置路径或加入 PATH |
 
 程序启动时会自动检测以上依赖，缺失时会提示安装方法。
 
-默认视频转码后端是 `nvencc`。如果 NVEncC 不在 PATH，可设置：
+默认编码器是 `nvenc`（HEVC/NVENC）：ffmpeg 用 NVDEC 硬解 + CPU Lanczos 超分 + `hevc_nvenc` 编码。若 ffmpeg 不在 PATH，可设置：
 
 ```powershell
-$env:PIPELINE_NVENCC_PATH = "E:\Software\NegativeEncoder\Libs\NVEncC64.exe"
+$env:PIPELINE_FFMPEG_PATH = "E:\GreenSoftware\ffmpeg\bin\ffmpeg.exe"
+```
+
+没有 NVIDIA 显卡时，切换到软件编码器：
+
+```powershell
+$env:PIPELINE_ENCODER = "svtav1"   # libsvtav1，CPU 编码
 ```
 
 ## 快速开始
@@ -43,8 +48,8 @@ python -m yt_pipeline --fresh https://youtube.com/watch?v=...
 |----------|--------|------|
 | `PIPELINE_DOWNLOAD_CONCURRENCY` | `2` | 并行下载 worker 数 |
 | `PIPELINE_STATE_FILE` | `progress.json` | 断点续跑文件路径 |
-| `PIPELINE_TRANSCODE_BACKEND` | `nvencc` | 视频转码后端，支持 `nvencc` / `ffmpeg` |
-| `PIPELINE_NVENCC_PATH` | 空 | NVEncC 可执行文件路径 |
+| `PIPELINE_ENCODER` | `nvenc` | 视频编码器，支持 `nvenc` / `svtav1` |
+| `PIPELINE_NVENC_HW_DECODE` | `1` | 是否用 NVDEC 硬解（`0` 关闭，全部软解） |
 | `PIPELINE_FFMPEG_PATH` | 空 | ffmpeg 可执行文件路径 |
 | `PIPELINE_FFPROBE_PATH` | 空 | ffprobe 可执行文件路径 |
 

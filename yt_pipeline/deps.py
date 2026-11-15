@@ -1,4 +1,4 @@
-"""外部依赖检测：yt-dlp / ffmpeg / ffprobe / NVEncC。"""
+"""外部依赖检测：yt-dlp / ffmpeg / ffprobe。"""
 
 from __future__ import annotations
 
@@ -18,9 +18,6 @@ class DependencyError(Exception):
     def __init__(self, tool_name: str, message: str):
         self.tool_name = tool_name
         super().__init__(message)
-
-
-NVENCC_CANDIDATES = ("NVEncC64.exe", "NVEncC64", "nvencc64", "NVEncC")
 
 
 def _resolve_tool_path(
@@ -69,21 +66,12 @@ def resolve_dependency_paths() -> None:
     config.FFPROBE_PATH = _resolve_tool_path("ffprobe", config.FFPROBE_PATH)
     logger.debug("Resolved ffprobe path: %s", config.FFPROBE_PATH)
 
-    backend = config.TRANSCODE_BACKEND.lower()
-    if backend == config.BACKEND_FFMPEG:
-        return
-    if backend != config.BACKEND_NVENCC:
+    encoder = config.TRANSCODE_ENCODER.lower()
+    if encoder not in config.ENCODERS:
         raise DependencyError(
-            "transcode_backend",
-            f"Unknown transcode backend: {config.TRANSCODE_BACKEND}",
+            "encoder",
+            f"未知编码器: {config.TRANSCODE_ENCODER}",
         )
-
-    config.NVENCC_PATH = _resolve_tool_path(
-        "nvencc",
-        config.NVENCC_PATH,
-        candidates=NVENCC_CANDIDATES,
-    )
-    logger.debug("Resolved nvencc path: %s", config.NVENCC_PATH)
 
 
 def check_dependencies() -> None:
@@ -102,15 +90,3 @@ def check_dependencies() -> None:
 
     _verify_executable(config.FFPROBE_PATH, "ffprobe")
     logger.debug("OK: ffprobe (%s)", config.FFPROBE_PATH)
-
-    backend = config.TRANSCODE_BACKEND.lower()
-    if backend == config.BACKEND_FFMPEG:
-        return
-    if backend != config.BACKEND_NVENCC:
-        raise DependencyError(
-            "transcode_backend",
-            f"未知转码后端: {config.TRANSCODE_BACKEND}",
-        )
-
-    _verify_executable(config.NVENCC_PATH, "nvencc", version_arg="--version")
-    logger.debug("OK: nvencc (%s)", config.NVENCC_PATH)

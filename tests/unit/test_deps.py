@@ -35,20 +35,20 @@ class TestResolveToolPath:
 
         def _which(name):
             calls.append(name)
-            if name == "NVEncC64.exe":
-                return "C:/Tools/NVEncC64.exe"
+            if name == "ffmpeg.exe":
+                return "C:/Tools/ffmpeg.exe"
             return None
 
         monkeypatch.setattr("shutil.which", _which)
 
         result = _resolve_tool_path(
-            "nvencc",
+            "ffmpeg",
             None,
-            candidates=["NVEncC64.exe", "nvencc64"],
+            candidates=["ffmpeg.exe", "ffmpeg64"],
         )
 
-        assert result == "C:/Tools/NVEncC64.exe"
-        assert calls == ["NVEncC64.exe"]
+        assert result == "C:/Tools/ffmpeg.exe"
+        assert calls == ["ffmpeg.exe"]
 
 
 class TestVerifyExecutable:
@@ -86,23 +86,21 @@ class TestVerifyExecutable:
 
         monkeypatch.setattr("subprocess.run", _run)
 
-        _verify_executable("/tools/NVEncC64.exe", "nvencc", version_arg="--version")
+        _verify_executable("/tools/customtool", "customtool", version_arg="--version")
 
-        assert calls == [["/tools/NVEncC64.exe", "--version"]]
+        assert calls == [["/tools/customtool", "--version"]]
 
 
 class TestCheckDependencies:
     def test_resolve_dependency_paths_without_verifying(self, monkeypatch):
-        monkeypatch.setattr(config, "TRANSCODE_BACKEND", "nvencc", raising=False)
+        monkeypatch.setattr(config, "TRANSCODE_ENCODER", "nvenc", raising=False)
         monkeypatch.setattr(config, "FFMPEG_PATH", None)
         monkeypatch.setattr(config, "FFPROBE_PATH", None)
-        monkeypatch.setattr(config, "NVENCC_PATH", None, raising=False)
 
         def _which(name):
             return {
                 "ffmpeg": "/usr/bin/ffmpeg",
                 "ffprobe": "/usr/bin/ffprobe",
-                "NVEncC64.exe": "C:/Tools/NVEncC64.exe",
             }.get(name)
 
         def _run(*args, **kwargs):
@@ -115,10 +113,9 @@ class TestCheckDependencies:
 
         assert config.FFMPEG_PATH == "/usr/bin/ffmpeg"
         assert config.FFPROBE_PATH == "/usr/bin/ffprobe"
-        assert config.NVENCC_PATH == "C:/Tools/NVEncC64.exe"
 
     def test_all_ok(self, monkeypatch):
-        monkeypatch.setattr(config, "TRANSCODE_BACKEND", "ffmpeg", raising=False)
+        monkeypatch.setattr(config, "TRANSCODE_ENCODER", "svtav1", raising=False)
         monkeypatch.setattr(config, "FFMPEG_PATH", "/usr/bin/ffmpeg")
         monkeypatch.setattr(config, "FFPROBE_PATH", "/usr/bin/ffprobe")
         monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
@@ -128,16 +125,10 @@ class TestCheckDependencies:
         )
         check_dependencies()
 
-    def test_nvencc_backend_all_ok_from_path_candidate(self, monkeypatch):
-        monkeypatch.setattr(config, "TRANSCODE_BACKEND", "nvencc", raising=False)
+    def test_nvenc_encoder_only_needs_ffmpeg(self, monkeypatch):
+        monkeypatch.setattr(config, "TRANSCODE_ENCODER", "nvenc", raising=False)
         monkeypatch.setattr(config, "FFMPEG_PATH", "/usr/bin/ffmpeg")
         monkeypatch.setattr(config, "FFPROBE_PATH", "/usr/bin/ffprobe")
-        monkeypatch.setattr(config, "NVENCC_PATH", None, raising=False)
-
-        def _which(name):
-            return {
-                "NVEncC64.exe": "C:/Tools/NVEncC64.exe",
-            }.get(name)
 
         calls = []
 
@@ -145,14 +136,14 @@ class TestCheckDependencies:
             calls.append(args[0])
             return subprocess.CompletedProcess(args[0], 0)
 
-        monkeypatch.setattr("shutil.which", _which)
         monkeypatch.setattr("subprocess.run", _run)
 
         check_dependencies()
 
-        assert config.NVENCC_PATH == "C:/Tools/NVEncC64.exe"
-        assert ["/tools/NVEncC64.exe", "--version"] not in calls
-        assert ["C:/Tools/NVEncC64.exe", "--version"] in calls
+        assert calls == [
+            ["/usr/bin/ffmpeg", "-version"],
+            ["/usr/bin/ffprobe", "-version"],
+        ]
 
     def test_ytdlp_missing(self, monkeypatch):
         import builtins
@@ -165,7 +156,7 @@ class TestCheckDependencies:
             return real_import(name, *args, **kwargs)
 
         monkeypatch.setattr(builtins, "__import__", _mock_import)
-        monkeypatch.setattr(config, "TRANSCODE_BACKEND", "ffmpeg", raising=False)
+        monkeypatch.setattr(config, "TRANSCODE_ENCODER", "svtav1", raising=False)
         monkeypatch.setattr(config, "FFMPEG_PATH", "/usr/bin/ffmpeg")
         monkeypatch.setattr(config, "FFPROBE_PATH", "/usr/bin/ffprobe")
         monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
@@ -178,7 +169,7 @@ class TestCheckDependencies:
         assert exc_info.value.tool_name == "yt-dlp"
 
     def test_ffmpeg_missing(self, monkeypatch):
-        monkeypatch.setattr(config, "TRANSCODE_BACKEND", "ffmpeg", raising=False)
+        monkeypatch.setattr(config, "TRANSCODE_ENCODER", "svtav1", raising=False)
         monkeypatch.setattr(config, "FFMPEG_PATH", None)
         monkeypatch.setattr(config, "FFPROBE_PATH", None)
         monkeypatch.setattr("shutil.which", lambda name: None)
@@ -186,12 +177,11 @@ class TestCheckDependencies:
             check_dependencies()
         assert exc_info.value.tool_name == "ffmpeg"
 
-    def test_nvencc_missing_for_nvencc_backend(self, monkeypatch):
-        monkeypatch.setattr(config, "TRANSCODE_BACKEND", "nvencc", raising=False)
+    def test_unknown_encoder(self, monkeypatch):
+        # "nvencc" 是已移除的旧编码器名，现在应被视为未知编码器
+        monkeypatch.setattr(config, "TRANSCODE_ENCODER", "nvencc", raising=False)
         monkeypatch.setattr(config, "FFMPEG_PATH", "/usr/bin/ffmpeg")
         monkeypatch.setattr(config, "FFPROBE_PATH", "/usr/bin/ffprobe")
-        monkeypatch.setattr(config, "NVENCC_PATH", None, raising=False)
-        monkeypatch.setattr("shutil.which", lambda name: None)
         monkeypatch.setattr(
             "subprocess.run",
             lambda *a, **kw: subprocess.CompletedProcess(a[0], 0),
@@ -200,7 +190,7 @@ class TestCheckDependencies:
         with pytest.raises(DependencyError) as exc_info:
             check_dependencies()
 
-        assert exc_info.value.tool_name == "nvencc"
+        assert exc_info.value.tool_name == "encoder"
 
     def test_ffprobe_not_executable(self, monkeypatch):
         call_count = 0
@@ -212,7 +202,7 @@ class TestCheckDependencies:
                 return subprocess.CompletedProcess(args[0], 0)
             return subprocess.CompletedProcess(args[0], 1)  # ffprobe fails
 
-        monkeypatch.setattr(config, "TRANSCODE_BACKEND", "ffmpeg", raising=False)
+        monkeypatch.setattr(config, "TRANSCODE_ENCODER", "svtav1", raising=False)
         monkeypatch.setattr(config, "FFMPEG_PATH", "/usr/bin/ffmpeg")
         monkeypatch.setattr(config, "FFPROBE_PATH", "/usr/bin/ffprobe")
         monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")

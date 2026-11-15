@@ -10,9 +10,21 @@ from yt_pipeline.pipeline import ShutdownManager
 
 # ---- Mock 数据常量 ----
 
-FFPROBE_1081 = (0, '{"streams":[{"width":1920,"height":1081}]}', "")
-FFPROBE_1080 = (0, '{"streams":[{"width":1920,"height":1080}]}', "")
-FFPROBE_ULTRAWIDE = (0, '{"streams":[{"width":3840,"height":1081}]}', "")
+FFPROBE_1081 = (
+    0,
+    '{"streams":[{"width":1920,"height":1081,"codec_name":"vp9"}]}',
+    "",
+)
+FFPROBE_1080 = (
+    0,
+    '{"streams":[{"width":1920,"height":1080,"codec_name":"vp9"}]}',
+    "",
+)
+FFPROBE_ULTRAWIDE = (
+    0,
+    '{"streams":[{"width":3840,"height":1081,"codec_name":"vp9"}]}',
+    "",
+)
 FFPROBE_FAILURE = (1, "", "ffprobe error: could not find stream info")
 
 FFPROBE_THUMBNAIL_TALL = (0, '{"streams":[{"width":320,"height":180}]}', "")
@@ -131,8 +143,7 @@ def pipeline_env(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(config, "FFMPEG_PATH", "ffmpeg")
     monkeypatch.setattr(config, "FFPROBE_PATH", "ffprobe")
-    monkeypatch.setattr(config, "TRANSCODE_BACKEND", "nvencc", raising=False)
-    monkeypatch.setattr(config, "NVENCC_PATH", "NVEncC64.exe", raising=False)
+    monkeypatch.setattr(config, "TRANSCODE_ENCODER", "nvenc", raising=False)
     monkeypatch.setattr(config, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr("yt_pipeline.download_worker.OUTPUT_DIR", tmp_path)
 

@@ -41,7 +41,7 @@ async def probe(file_path: Path) -> StreamSpec:
         C.FFPROBE_PATH, "-hide_banner",
         "-v", "error",
         "-select_streams", "v:0",
-        "-show_entries", "stream=width,height",
+        "-show_entries", "stream=width,height,codec_name",
         "-of", "json",
         str(file_path),
     ])
@@ -57,6 +57,7 @@ async def probe(file_path: Path) -> StreamSpec:
         stream = streams[0]
         width = int(stream.get("width") or 0)
         height = int(stream.get("height") or 0)
+        codec_name = str(stream.get("codec_name") or "")
     else:
         # fmt: off
         rc2, stdout2, stderr2 = await run_command([
@@ -73,10 +74,11 @@ async def probe(file_path: Path) -> StreamSpec:
         fmt = data2.get("format") or {}
         width = int(fmt.get("width") or 0)
         height = int(fmt.get("height") or 0)
+        codec_name = ""
 
     if width <= 0 or height <= 0:
         raise RuntimeError(f"无法读取尺寸: {file_path}")
-    return StreamSpec(width=width, height=height)
+    return StreamSpec(width=width, height=height, codec_name=codec_name)
 
 
 async def process_thumbnail(thumbnail_path: Path) -> None:
@@ -152,8 +154,8 @@ def _processed_output(video_path: Path, strategy: str, *, ext: str = "mp4") -> P
     )
 
 
-def _build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], Path]:
-    """根据策略构建 ffmpeg/libsvtav1 命令和输出路径（mkv 容器、音频 copy）。"""
+def _build_svtav1_command(video_path: Path, strategy: str) -> tuple[list[str], Path]:
+    """根据策略构建 libsvtav1 命令和输出路径（mkv 容器、音频 copy）。"""
     output = _processed_output(video_path, strategy, ext="mkv")
     if strategy == Strategies.UPSCALE_4K:
         vf = (
@@ -185,57 +187,49 @@ def _build_ffmpeg_command(video_path: Path, strategy: str) -> tuple[list[str], P
     return command, output
 
 
-def _even_floor(value: int) -> int:
-    return value // 2 * 2
-
-
-def _build_nvencc_command(
+def _build_nvenc_command(
     video_path: Path,
     strategy: str,
     spec: StreamSpec,
 ) -> tuple[list[str], Path]:
-    """根据策略构建 NVEncC 命令和输出路径。"""
+    """根据策略构建 ffmpeg/nvenc 命令和输出路径（MP4 容器）。"""
     output = _processed_output(video_path, strategy)
 
     if strategy == Strategies.UPSCALE_4K:
-        target_ratio = C.TARGET_4K_WIDTH / C.TARGET_4K_HEIGHT
-        if spec.ratio > target_ratio:
-            out_w = C.TARGET_4K_WIDTH
-            out_h = _even_floor(round(out_w / spec.ratio))
-        else:
-            out_h = C.TARGET_4K_HEIGHT
-            out_w = _even_floor(round(out_h * spec.ratio))
-        output_res = f"{out_w}x{out_h}"
-        pad_args: list[str] = []
+        scale = (
+            f"scale={C.TARGET_4K_WIDTH}:{C.TARGET_4K_HEIGHT}:flags=lanczos"
+            f":force_original_aspect_ratio=decrease:force_divisible_by=2"
+        )
     else:
-        resize_w = _even_floor(spec.width)
-        resize_h = _even_floor(spec.height)
-        pad_total = C.TARGET_PAD_HEIGHT - resize_h
-        if resize_w <= 0 or resize_h <= 0 or pad_total < 0:
-            raise ValueError(
-                f"无法为尺寸 {spec.width}x{spec.height} 构建 pad_1600 命令"
-            )
-        pad_top = pad_total // 2
-        pad_bottom = pad_total - pad_top
-        output_res = f"{resize_w}x{C.TARGET_PAD_HEIGHT}"
-        pad_args = ["--vpp-pad", f"0,{pad_top},0,{pad_bottom}"]
+        scale = (
+            f"scale=trunc(iw/2)*2:trunc(ih/2)*2,"
+            f"pad=iw:{C.TARGET_PAD_HEIGHT}:0:({C.TARGET_PAD_HEIGHT}-ih)/2:black"
+        )
+
+    hw_decode = C.NVENC_HW_DECODE and spec.codec_name in C.NVDEC_CODECS
+    vf = (
+        f"hwdownload,format=nv12,format=yuv420p,{scale}"
+        if hw_decode
+        else f"format=yuv420p,{scale}"
+    )
 
     # fmt: off
     command = [
-        C.NVENCC_PATH, "--avsw",
+        C.FFMPEG_PATH, "-hide_banner", "-y", "-nostats",
+        *(["-init_hw_device", "cuda=cu:0",
+           "-hwaccel", "cuda", "-hwaccel_device", "cu",
+           "-hwaccel_output_format", "cuda"] if hw_decode else []),
         "-i", str(video_path),
-        "--codec", C.NVENCC_CODEC,
-        "--qvbr", str(C.NVENCC_QVBR),
-        "-u", C.NVENCC_PRESET,
-        "--output-res", output_res,
-        "--vpp-resize", C.NVENCC_RESIZE_ALGO,
-        *pad_args,
-        "--colorrange", "auto", "--colormatrix", "auto",
-        "--colorprim", "auto", "--transfer", "auto", "--chromaloc", "auto",
-        "--audio-codec", C.NVENCC_AUDIO_CODEC,
-        "--audio-bitrate", str(C.NVENCC_AUDIO_BITRATE),
-        "-f", "mp4",
-        "-o", str(output),
+        "-map", "0:V:0", "-map", "0:a:0?",
+        "-vf", vf,
+        "-c:v", "hevc_nvenc",
+        "-preset", C.NVENC_PRESET, "-tune", C.NVENC_TUNE,
+        "-rc", C.NVENC_RC, "-cq", str(C.NVENC_CQ), "-b:v", "0",
+        "-spatial_aq", str(C.NVENC_SPATIAL_AQ),
+        "-profile:v", C.NVENC_PROFILE, "-tag:v", "hvc1",
+        "-c:a", "aac", "-b:a", f"{C.NVENC_AUDIO_BITRATE}k", "-ac", "2",
+        "-map_metadata", "0", "-movflags", "+faststart",
+        str(output),
     ]
     # fmt: on
 
@@ -247,13 +241,13 @@ def build_transcode_command(
     strategy: str,
     spec: StreamSpec,
 ) -> tuple[list[str], Path]:
-    """根据配置的转码后端构建命令和输出路径。"""
-    backend = C.TRANSCODE_BACKEND.lower()
-    if backend == C.BACKEND_FFMPEG:
-        return _build_ffmpeg_command(video_path, strategy)
-    if backend == C.BACKEND_NVENCC:
-        return _build_nvencc_command(video_path, strategy, spec)
-    raise ValueError(f"未知转码后端: {C.TRANSCODE_BACKEND}")
+    """根据配置的编码器构建命令和输出路径。"""
+    encoder = C.TRANSCODE_ENCODER.lower()
+    if encoder == C.ENCODER_NVENC:
+        return _build_nvenc_command(video_path, strategy, spec)
+    if encoder == C.ENCODER_SVTAV1:
+        return _build_svtav1_command(video_path, strategy)
+    raise ValueError(f"未知编码器: {C.TRANSCODE_ENCODER}")
 
 
 async def assessment_worker(

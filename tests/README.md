@@ -32,15 +32,15 @@ pytest tests/ -v
 ruff check tests/
 ```
 
-## 单元测试（63 个）
+## 单元测试（70 个）
 
 | 测试文件 | 测试数 | 覆盖函数 |
 |----------|--------|----------|
 | `test_models.py` | 3 | `StreamSpec` 属性（short_edge, long_edge, ratio） |
 | `test_download.py` | 9 | `generate_credits`（正常 + 缺字段），`resolve_video_path`，`WorkerLogger` |
-| `test_deps.py` | 14 | 依赖路径解析、可执行性验证、ffmpeg/ffprobe/NVEncC 检测 |
+| `test_deps.py` | 15 | 依赖路径解析、可执行性验证、ffmpeg/ffprobe 检测、非法编码器 |
 | `test_thumbnail.py` | 3 | `find_thumbnail`（扩展名匹配 / video_id glob / 无封面） |
-| `test_strategy.py` | 13 | `decide_video_strategy`，`build_transcode_command`（NVEncC / ffmpeg / 非法策略 / 非法后端 / 幂等输出路径） |
+| `test_strategy.py` | 18 | `decide_video_strategy`，`build_transcode_command`（nvenc / svtav1 / 软解回退 / 非法策略 / 非法编码器 / 幂等输出路径） |
 | `test_cli.py` | 14 | `parse_args`，`prepare_tasks`，`main` |
 | `test_url_collector.py` | 7 | `collect_urls`（文件/列表/交互式输入），`_filter`（URL 变体过滤），`_ClipboardMonitor`（正常/无 pyperclip） |
 
@@ -50,7 +50,7 @@ Mock 最低外部边界（`_do_download`、`run_command`、`run_transcode`），
 
 | 场景类 | 测试数 | 验证内容 |
 |--------|--------|----------|
-| `TestFullPipeline` | 2 | upscale_4k（1920x1081→NVEncC output-res 3836x2160）、pad_1600（3840x1081→NVEncC pad 0,260,0,260）全链路 pending→done |
+| `TestFullPipeline` | 2 | upscale_4k（1920x1081→ffmpeg/NVENC scale 3840:2160）、pad_1600（3840x1081→ffmpeg pad 表达式）全链路 pending→done |
 | `TestSkipStrategy` | 1 | 1920x1080 skip：不经 processing_video，run_transcode 未被调用 |
 | `TestShutdown` | 3 | download/assessment/transcode 阶段触发 shutdown，任务分别保留 DOWNLOADING / DOWNLOADED / PROCESSING_VIDEO 状态 |
 | `TestResume` | 1 | DOWNLOADING 中断恢复：RESUME_RESET 回退到 PENDING→重新走完全链路 |
@@ -81,7 +81,7 @@ Mock 最低外部边界（`_do_download`、`run_command`、`run_transcode`），
 |------|------|
 | 纯函数 / 数据类 | 覆盖充分 |
 | async worker 协程 | 仅集成测试间接覆盖，无隔离单元测试 |
-| 外部边界（yt-dlp / ffmpeg / ffprobe / NVEncC） | 全部 mock，不依赖真实环境 |
+| 外部边界（yt-dlp / ffmpeg / ffprobe） | 全部 mock，不依赖真实环境 |
 | 状态机流转 | 主路径覆盖，ASSESSING 中间态已通过 shutdown 测试覆盖 |
 | 优雅退出 | 3 个阶段均有测试，`run_transcode` 内部 stdin `q` 指令未验证 |
 

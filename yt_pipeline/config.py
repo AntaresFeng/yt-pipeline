@@ -11,15 +11,15 @@ STATE_FILE: Path = Path(
 )
 
 # ---- 外部工具路径 ----
-FFMPEG_PATH: str | None = None  # 可手动指定 FFmpeg 路径，留空则 which 查找
-FFPROBE_PATH: str | None = None
-NVENCC_PATH: str | None = r"E:\Software\NegativeEncoder\Libs\NVEncC64.exe"  # 不许删！!
+FFMPEG_PATH: str | None = os.environ.get("PIPELINE_FFMPEG_PATH") or None
+FFPROBE_PATH: str | None = os.environ.get("PIPELINE_FFPROBE_PATH") or None
 SKIP_CHECK_DEPENDENCIES: bool = True
 
-# ---- 转码后端 ----
-BACKEND_FFMPEG: str = "ffmpeg"
-BACKEND_NVENCC: str = "nvencc"
-TRANSCODE_BACKEND: str = os.environ.get("PIPELINE_TRANSCODE_BACKEND", BACKEND_NVENCC)
+# ---- 转码编码器 ----
+ENCODER_NVENC: str = "nvenc"  # hevc_nvenc：GPU 编码（NVDEC 硬解 + CPU Lanczos）
+ENCODER_SVTAV1: str = "svtav1"  # libsvtav1：CPU 编码
+ENCODERS: frozenset[str] = frozenset({ENCODER_NVENC, ENCODER_SVTAV1})
+TRANSCODE_ENCODER: str = os.environ.get("PIPELINE_ENCODER", ENCODER_NVENC)
 
 # ---- 视频处理阈值 ----
 MIN_SHORT_EDGE = 1080
@@ -35,18 +35,24 @@ TARGET_ASPECT_RATIO = 16 / 9
 # ---- 封面处理 ----
 THUMBNAIL_MIN_HEIGHT = 720
 
-# ---- 编码参数：ffmpeg/libsvtav1 后端 ----
+# ---- 编码参数：SVT-AV1（libsvtav1）----
 FFMPEG_PRESET: int = 6       # SVT-AV1 preset，-2~13；6 = 平衡档（VOD 最佳点）
 FFMPEG_CRF: int = 29         # SVT-AV1 CRF，0~63；29 = 平衡档
 FFMPEG_GOP: int = 300        # GOP，10×帧率且 ≤300；300 = YouTube 通用安全上限
 FFMPEG_SVTAV1_PARAMS: str = "tune=0"  # svtav1-params，tune=0 = VQ 视觉质量
 
-NVENCC_CODEC: str = "hevc"
-NVENCC_QVBR: int = 23
-NVENCC_PRESET: str = "quality"
-NVENCC_RESIZE_ALGO: str = "spline36"
-NVENCC_AUDIO_CODEC: str = "aac"
-NVENCC_AUDIO_BITRATE: int = 192  # NVEncC 的 --audio-bitrate 单位是 kbps，传整数不带 "k"
+# ---- 编码参数：NVENC（hevc_nvenc）----
+NVENC_PRESET: str = "p4"
+NVENC_TUNE: str = "hq"
+NVENC_RC: str = "vbr"
+NVENC_CQ: int = 24
+NVENC_SPATIAL_AQ: int = 1  # 仅 Spatial AQ；与 Temporal AQ 不同时开启
+NVENC_PROFILE: str = "main"
+NVENC_AUDIO_BITRATE: int = 256  # kbps
+NVENC_HW_DECODE: bool = os.environ.get("PIPELINE_NVENC_HW_DECODE", "1") != "0"
+NVDEC_CODECS: frozenset[str] = frozenset(
+    {"h264", "hevc", "vp9", "vp8", "vc1", "mpeg2video"}
+)
 
 # ---- 下载 ----
 VIDEO_EXTS: set[str] = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}

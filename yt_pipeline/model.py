@@ -42,6 +42,7 @@ RESUME_RESET: dict[str, str] = {
 class StreamSpec:
     width: int
     height: int
+    codec_name: str = ""
 
     @property
     def short_edge(self) -> int:

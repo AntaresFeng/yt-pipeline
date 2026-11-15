@@ -26,9 +26,9 @@ STRATEGY_PARAMS = [
 
 
 @pytest.fixture
-def ffmpeg_backend(monkeypatch):
-    """注入 ffmpeg/libsvtav1 后端常量，供 build_transcode_command 走 ffmpeg 分支。"""
-    monkeypatch.setattr(C, "TRANSCODE_BACKEND", "ffmpeg")
+def svtav1_encoder(monkeypatch):
+    """注入 svtav1 编码器常量，供 build_transcode_command 走 libsvtav1 分支。"""
+    monkeypatch.setattr(C, "TRANSCODE_ENCODER", "svtav1")
     monkeypatch.setattr(C, "FFMPEG_PATH", "ffmpeg", raising=False)
     monkeypatch.setattr(C, "FFMPEG_PRESET", 6, raising=False)
     monkeypatch.setattr(C, "FFMPEG_CRF", 29, raising=False)
@@ -64,84 +64,126 @@ def _arg_after(cmd: list[str], name: str) -> str:
 
 class TestBuildTranscodeCommand:
     @pytest.fixture(autouse=True)
-    def default_nvencc_config(self, monkeypatch):
-        monkeypatch.setattr(C, "TRANSCODE_BACKEND", "nvencc", raising=False)
+    def default_nvenc_config(self, monkeypatch):
+        monkeypatch.setattr(C, "TRANSCODE_ENCODER", "nvenc", raising=False)
         monkeypatch.setattr(C, "FFMPEG_PATH", "ffmpeg", raising=False)
-        monkeypatch.setattr(C, "NVENCC_PATH", "NVEncC64.exe", raising=False)
-        monkeypatch.setattr(C, "NVENCC_CODEC", "hevc", raising=False)
-        monkeypatch.setattr(C, "NVENCC_QVBR", 23, raising=False)
-        monkeypatch.setattr(C, "NVENCC_PRESET", "quality", raising=False)
-        monkeypatch.setattr(C, "NVENCC_RESIZE_ALGO", "spline36", raising=False)
-        monkeypatch.setattr(C, "NVENCC_AUDIO_CODEC", "aac", raising=False)
-        monkeypatch.setattr(C, "NVENCC_AUDIO_BITRATE", 192, raising=False)
+        monkeypatch.setattr(C, "NVENC_PRESET", "p4", raising=False)
+        monkeypatch.setattr(C, "NVENC_TUNE", "hq", raising=False)
+        monkeypatch.setattr(C, "NVENC_RC", "vbr", raising=False)
+        monkeypatch.setattr(C, "NVENC_CQ", 24, raising=False)
+        monkeypatch.setattr(C, "NVENC_SPATIAL_AQ", 1, raising=False)
+        monkeypatch.setattr(C, "NVENC_PROFILE", "main", raising=False)
+        monkeypatch.setattr(C, "NVENC_AUDIO_BITRATE", 256, raising=False)
+        monkeypatch.setattr(C, "NVENC_HW_DECODE", True, raising=False)
 
-    def test_nvencc_upscale_4k(self, tmp_path: Path):
+    def test_nvenc_upscale_4k(self, tmp_path: Path):
         video = tmp_path / "test.mp4"
         video.touch()
         cmd, output = build_transcode_command(
             video,
             "upscale_4k",
-            StreamSpec(width=1920, height=1081),
+            StreamSpec(width=1920, height=1081, codec_name="vp9"),
         )
 
-        assert cmd[0] == "NVEncC64.exe"
-        assert "--avsw" in cmd
-        assert "--avhw" not in cmd
-        assert _arg_after(cmd, "--output-res") == "3836x2160"
-        assert _arg_after(cmd, "--vpp-resize") == "spline36"
-        assert "--vpp-pad" not in cmd
-        assert _arg_after(cmd, "--codec") == "hevc"
-        assert "--cqp" not in cmd
-        assert _arg_after(cmd, "--qvbr") == "23"
-        assert _arg_after(cmd, "-u") == "quality"
-        assert _arg_after(cmd, "--audio-codec") == "aac"
-        assert _arg_after(cmd, "--audio-bitrate") == "192"
-        assert _arg_after(cmd, "-f") == "mp4"
-        assert _arg_after(cmd, "-o") == str(output)
+        assert cmd[0] == "ffmpeg"
+        assert _arg_after(cmd, "-init_hw_device") == "cuda=cu:0"
+        assert _arg_after(cmd, "-hwaccel") == "cuda"
+        assert _arg_after(cmd, "-hwaccel_device") == "cu"
+        assert _arg_after(cmd, "-hwaccel_output_format") == "cuda"
+        vf = _arg_after(cmd, "-vf")
+        assert vf.startswith("hwdownload,format=nv12,format=yuv420p,")
+        assert (
+            "scale=3840:2160:flags=lanczos:force_original_aspect_ratio=decrease" in vf
+        )
+        assert "force_divisible_by=2" in vf
+        assert _arg_after(cmd, "-c:v") == "hevc_nvenc"
+        assert _arg_after(cmd, "-preset") == "p4"
+        assert _arg_after(cmd, "-tune") == "hq"
+        assert _arg_after(cmd, "-rc") == "vbr"
+        assert _arg_after(cmd, "-cq") == "24"
+        assert _arg_after(cmd, "-b:v") == "0"
+        assert _arg_after(cmd, "-spatial_aq") == "1"
+        assert "-temporal_aq" not in cmd
+        assert _arg_after(cmd, "-profile:v") == "main"
+        assert _arg_after(cmd, "-tag:v") == "hvc1"
+        assert _arg_after(cmd, "-c:a") == "aac"
+        assert _arg_after(cmd, "-b:a") == "256k"
+        assert _arg_after(cmd, "-ac") == "2"
+        assert "0:V:0" in cmd
+        assert "0:a:0?" in cmd
+        assert _arg_after(cmd, "-movflags") == "+faststart"
         assert output.name.endswith("_processed_4k.mp4")
         assert output != video
 
     @pytest.mark.parametrize(
-        "width, height, expected_res",
-        [
-            (2560, 1440, "3840x2160"),  # 恰好 16:9, 不变
-            (1440, 1080, "2880x2160"),  # 4:3, 高度顶满
-            (1920, 800, "3840x1600"),  # 2.4:1, 宽度顶满
-        ],
+        "width, height",
+        [(2560, 1440), (1440, 1080), (1920, 800)],
         ids=["exact_16_9", "4_3", "2_4_1"],
     )
-    def test_nvencc_upscale_4k_preserves_aspect_ratio(
-        self, tmp_path: Path, width, height, expected_res
+    def test_nvenc_upscale_4k_preserves_aspect_ratio(
+        self, tmp_path: Path, width, height
     ):
         video = tmp_path / "test.mp4"
         video.touch()
         cmd, _ = build_transcode_command(
             video,
             "upscale_4k",
-            StreamSpec(width=width, height=height),
+            StreamSpec(width=width, height=height, codec_name="vp9"),
         )
-        assert _arg_after(cmd, "--output-res") == expected_res
-        assert "--vpp-pad" not in cmd
+        vf = _arg_after(cmd, "-vf")
+        # 尺寸交给 CPU Lanczos 的 scale 表达式，命令中不再出现输出尺寸参数
+        assert (
+            "scale=3840:2160:flags=lanczos:force_original_aspect_ratio=decrease" in vf
+        )
+        assert "pad" not in vf
 
-    def test_nvencc_pad_1600(self, tmp_path: Path):
+    def test_nvenc_pad_1600(self, tmp_path: Path):
         video = tmp_path / "test.mkv"
         video.touch()
         cmd, output = build_transcode_command(
             video,
             "pad_1600",
-            StreamSpec(width=3840, height=1081),
+            StreamSpec(width=3840, height=1081, codec_name="vp9"),
         )
 
-        assert _arg_after(cmd, "--output-res") == "3840x1600"
-        assert _arg_after(cmd, "--vpp-pad") == "0,260,0,260"
-        assert _arg_after(cmd, "--vpp-resize") == "spline36"
+        vf = _arg_after(cmd, "-vf")
+        assert "pad=iw:1600:0:(1600-ih)/2:black" in vf
+        assert _arg_after(cmd, "-c:v") == "hevc_nvenc"
         assert output.name.endswith("_processed_pad1600.mp4")
         assert output != video
 
-    def test_ffmpeg_backend_upscale_4k_svtav1(
+    def test_nvenc_av1_falls_back_to_software_decode(self, tmp_path: Path):
+        video = tmp_path / "test.mp4"
+        video.touch()
+        cmd, _ = build_transcode_command(
+            video,
+            "upscale_4k",
+            StreamSpec(width=1920, height=1081, codec_name="av1"),
+        )
+
+        assert "-hwaccel" not in cmd
+        assert "-hwaccel_output_format" not in cmd
+        vf = _arg_after(cmd, "-vf")
+        assert "hwdownload" not in vf
+        assert vf.startswith("format=yuv420p,")
+
+    def test_nvenc_hw_decode_disabled(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr(C, "NVENC_HW_DECODE", False, raising=False)
+        video = tmp_path / "test.mp4"
+        video.touch()
+        cmd, _ = build_transcode_command(
+            video,
+            "upscale_4k",
+            StreamSpec(width=1920, height=1081, codec_name="vp9"),
+        )
+
+        assert "-hwaccel" not in cmd
+        assert "hwdownload" not in _arg_after(cmd, "-vf")
+
+    def test_svtav1_encoder_upscale_4k_svtav1(
         self,
         tmp_path: Path,
-        ffmpeg_backend,
+        svtav1_encoder,
     ):
         video = tmp_path / "test.mp4"
         video.touch()
@@ -154,8 +196,7 @@ class TestBuildTranscodeCommand:
         assert cmd[0] == C.FFMPEG_PATH
         vf = _arg_after(cmd, "-vf")
         assert (
-            "scale=3840:2160:flags=lanczos:force_original_aspect_ratio=decrease"
-            in vf
+            "scale=3840:2160:flags=lanczos:force_original_aspect_ratio=decrease" in vf
         )
         assert "force_divisible_by=2" in vf
         assert _arg_after(cmd, "-c:v") == "libsvtav1"
@@ -169,7 +210,7 @@ class TestBuildTranscodeCommand:
         assert "-movflags" not in cmd
         assert output.name.endswith("_processed_4k.mkv")
 
-    def test_ffmpeg_backend_pad_1600_svtav1(self, tmp_path: Path, ffmpeg_backend):
+    def test_svtav1_encoder_pad_1600_svtav1(self, tmp_path: Path, svtav1_encoder):
         video = tmp_path / "test.mkv"
         video.touch()
         cmd, output = build_transcode_command(
@@ -199,11 +240,11 @@ class TestBuildTranscodeCommand:
                 video, "unknown", StreamSpec(width=1920, height=1081)
             )
 
-    def test_unknown_backend_raises(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr(C, "TRANSCODE_BACKEND", "bad-backend")
+    def test_unknown_encoder_raises(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr(C, "TRANSCODE_ENCODER", "bad-encoder")
         video = tmp_path / "test.mp4"
         video.touch()
-        with pytest.raises(ValueError, match="未知转码后端"):
+        with pytest.raises(ValueError, match="未知编码器"):
             build_transcode_command(
                 video,
                 "upscale_4k",
